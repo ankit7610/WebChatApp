@@ -26,8 +26,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   // Re-fetch when unreadCounts change (to update order if needed)
   useEffect(() => {
     if (conversations.length > 0) {
-      // Optional: re-sort locally if needed, but fetching is safer to get latest messages
-      // fetchConversations(); 
+      // Don't fetch here to avoid overwriting optimistic updates
     }
   }, [unreadCounts]);
 
@@ -39,6 +38,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
       };
 
       const res = await axios.get(`${API_URL}/api/messages/conversations`, config);
+      console.log('Fetched conversations:', res.data);
       setConversations(res.data);
       setLoading(false);
     } catch (error) {
@@ -52,17 +52,41 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
     e.preventDefault();
     setAdding(true);
     setAddError('');
+    console.log('Adding contact:', addEmail);
 
     try {
       const token = localStorage.getItem('chatToken');
-      await axios.post(`${API_URL}/api/messages/contacts`, { email: addEmail }, {
+      const res = await axios.post(`${API_URL}/api/messages/contacts`, { email: addEmail }, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('Add contact response:', res.data);
       
-      await fetchConversations();
+      // Optimistically add the new contact to the list immediately
+      if (res.data.user) {
+        const newContact = {
+          user: res.data.user,
+          lastMessage: null,
+          unreadCount: 0,
+          userId: res.data.user.firebaseUid || res.data.user._id
+        };
+        
+        setConversations(prev => {
+          // Check if already exists
+          if (prev.some(c => c.user._id === newContact.user._id)) {
+            return prev;
+          }
+          return [newContact, ...prev];
+        });
+      }
+
+      // Removed immediate fetch to prevent race condition where DB hasn't updated yet
+      // The background poller will eventually sync the list
+      // await fetchConversations();
+      
       setShowAddModal(false);
       setAddEmail('');
     } catch (err) {
+      console.error('Add contact error:', err);
       setAddError(err.response?.data?.error || 'Failed to add contact');
     } finally {
       setAdding(false);
@@ -147,6 +171,15 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
     <div className="flex-1 flex flex-col min-h-0 relative">
       {/* Header with Add Button */}
       <div className="p-4 flex items-center gap-2">
+        <button
+          onClick={fetchConversations}
+          className={`p-3 rounded-xl transition-all ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-gray-500'}`}
+          title="Refresh List"
+        >
+          <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
         <div className="relative flex-1">
           <svg className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-slate-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
