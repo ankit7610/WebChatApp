@@ -2,6 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --transition-speed: 0.3s;
+}
+
+/* Dark theme colors */
+[data-theme='dark'] {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-chat: #1a1f2e;
+  --bg-message-own: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  --bg-message-other: #2d3748;
+  --border-color: rgba(148, 163, 184, 0.1);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --accent-primary: #8b5cf6;
+  --accent-secondary: #6366f1;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --input-bg: rgba(51, 65, 85, 0.5);
+  --hover-bg: rgba(51, 65, 85, 0.7);
+  --selected-bg: rgba(139, 92, 246, 0.2);
+  --badge-bg: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  --success-color: #10b981;
+  --error-color: #ef4444;
+  --warning-color: #f59e0b;
+}
+
+/* Light theme colors */
+[data-theme='light'] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-chat: #f8fafc;
+  --bg-message-own: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  --bg-message-other: #ffffff;
+  --border-color: rgba(100, 116, 139, 0.2);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  --accent-primary: #8b5cf6;
+  --accent-secondary: #6366f1;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --input-bg: #ffffff;
+  --hover-bg: #f1f5f9;
+  --selected-bg: rgba(139, 92, 246, 0.1);
+  --badge-bg: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  --success-color: #10b981;
+  --error-color: #ef4444;
+  --warning-color: #f59e0b;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -14,7 +66,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #0f172a;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background var(--transition-speed) ease, color var(--transition-speed) ease;
 }
 
 /* Custom animations */
@@ -49,6 +103,20 @@ body {
   }
 }
 
+@keyframes bounce-in {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
 }
@@ -61,12 +129,16 @@ body {
   animation: pulse-subtle 2s ease-in-out infinite;
 }
 
+.animate-bounce-in {
+  animation: bounce-in 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
 /* Smooth scrolling for messages */
 .overflow-y-auto {
   scroll-behavior: smooth;
 }
 
-/* Custom scrollbar - Modern dark theme */
+/* Custom scrollbar - Theme aware */
 .overflow-y-auto::-webkit-scrollbar {
   width: 6px;
 }
@@ -76,18 +148,19 @@ body {
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: linear-gradient(to bottom, #6366f1, #8b5cf6);
+  background: var(--accent-primary);
   border-radius: 10px;
+  transition: background var(--transition-speed) ease;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(to bottom, #4f46e5, #7c3aed);
+  background: var(--accent-secondary);
 }
 
 /* Hide scrollbar when not hovering */
 .overflow-y-auto {
   scrollbar-width: thin;
-  scrollbar-color: #6366f1 transparent;
+  scrollbar-color: var(--accent-primary) transparent;
 }
 
 /* Input focus glow */
@@ -111,4 +184,17 @@ button {
   background: rgba(139, 92, 246, 0.3);
   color: white;
 }
+
+/* Theme transition for all elements */
+* {
+  transition: background-color var(--transition-speed) ease,
+              border-color var(--transition-speed) ease,
+              color var(--transition-speed) ease;
+}
+
+/* Preserve specific transitions */
+button, input, .hover\:scale-105:hover {
+  transition: all 0.2s ease !important;
+}
+
 

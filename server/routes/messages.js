@@ -79,22 +79,71 @@ router.get('/:userId', authenticate, async (req, res) => {
 });
 
 /**
+ * POST /api/messages/contacts
+ * Add a user to contacts by email
+ */
+router.post('/contacts', authenticate, async (req, res) => {
+  try {
+    const { email } = req.body;
+    const currentUserId = req.user.userId;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Find the user by email
+    const userToAdd = await User.findOne({ email });
+    if (!userToAdd) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (userToAdd.firebaseUid === currentUserId) {
+      return res.status(400).json({ error: 'Cannot add yourself' });
+    }
+
+    // Add to current user's contacts if not already present
+    await User.findOneAndUpdate(
+      { firebaseUid: currentUserId },
+      { $addToSet: { contacts: userToAdd.firebaseUid } }
+    );
+
+    res.json({ 
+      message: 'Contact added successfully',
+      user: {
+        _id: userToAdd.firebaseUid,
+        displayName: userToAdd.displayName,
+        email: userToAdd.email,
+        firebaseUid: userToAdd.firebaseUid
+      }
+    });
+  } catch (error) {
+    console.error('Failed to add contact:', error.message);
+    res.status(500).json({ error: 'Failed to add contact' });
+  }
+});
+
+/**
  * GET /api/messages/conversations
- * Get list of all conversations with last message preview
+ * Get list of all conversations and contacts with last message preview
  */
 router.get('/conversations', authenticate, async (req, res) => {
   try {
     const userId = req.user.userId; // This is now a firebaseUid
     
+    // Get current user to access contacts
+    const currentUser = await User.findOne({ firebaseUid: userId });
+    const contactIds = currentUser?.contacts || [];
+
     // Get all unique conversation partners
     const sentMessages = await Message.distinct('recipientId', { senderId: userId });
     const receivedMessages = await Message.distinct('senderId', { recipientId: userId });
     
-    const conversationPartnerIds = [...new Set([...sentMessages, ...receivedMessages])];
+    // Merge conversation partners and manually added contacts
+    const allPartnerIds = [...new Set([...sentMessages, ...receivedMessages, ...contactIds])];
     
-    // Get user details and last message for each conversation
+    // Get user details and last message for each conversation/contact
     const conversations = await Promise.all(
-      conversationPartnerIds.map(async (partnerId) => {
+      allPartnerIds.map(async (partnerId) => {
         const partner = await User.findOne({ firebaseUid: partnerId }).select('displayName email firebaseUid');
         if (!partner) return null;
 
@@ -128,6 +177,10 @@ router.get('/conversations', authenticate, async (req, res) => {
     validConversations.sort((a, b) => {
       const timeA = a.lastMessage?.createdAt || 0;
       const timeB = b.lastMessage?.createdAt || 0;
+      // If times are equal (e.g. both 0), sort by name
+      if (timeA === timeB) {
+        return a.user.displayName.localeCompare(b.user.displayName);
+      }
       return new Date(timeB) - new Date(timeA);
     });
 

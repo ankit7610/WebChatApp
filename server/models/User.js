@@ -19,6 +19,9 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  contacts: [{
+    type: String, // Stores firebaseUid of contacts
+  }],
   createdAt: {
     type: Date,
     default: Date.now,
