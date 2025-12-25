@@ -14,9 +14,17 @@ export default function Chat() {
   const [selectedContact, setSelectedContact] = useState(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState('');
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const [showMobileContacts, setShowMobileContacts] = useState(true);
   const messagesEndRef = useRef(null);
+  const selectedContactRef = useRef(null);
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    selectedContactRef.current = selectedContact;
+  }, [selectedContact]);
 
   // Scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -42,6 +50,9 @@ export default function Chat() {
       navigate('/login');
       return;
     }
+
+    // Clear unread count for this contact
+    setUnreadCounts(prev => ({ ...prev, [selectedContact._id]: 0 }));
 
     // Fetch conversation history
     axios.get(`${API_URL}/api/messages/conversation/${selectedContact._id}`, {
@@ -78,8 +89,6 @@ export default function Chat() {
       console.log('Connected as:', data.username);
     });
 
-    // Note: We use a ref or functional update to access latest state inside event handler
-    // without adding dependencies that would cause reconnection
     websocket.on('message', (data) => {
       setMessages((prev) => {
         // Prevent duplicates
@@ -101,6 +110,15 @@ export default function Chat() {
 
         return [...prev, data];
       });
+
+      // Update unread count if message is from someone other than selected contact
+      const currentSelected = selectedContactRef.current;
+      if (data.senderId !== currentUser?.id && data.senderId !== currentSelected?._id) {
+        setUnreadCounts(prev => ({
+          ...prev,
+          [data.senderId]: (prev[data.senderId] || 0) + 1
+        }));
+      }
     });
 
     websocket.on('error', () => {
@@ -121,7 +139,7 @@ export default function Chat() {
     return () => {
       websocket.disconnect();
     };
-  }, [navigate]); // Removed selectedContact and currentUser to prevent reconnection loops
+  }, [navigate, currentUser?.id]);
 
   // Filter messages for display based on selected contact
   const displayMessages = messages.filter(msg => {
@@ -137,7 +155,7 @@ export default function Chat() {
 
     const messageText = inputText.trim();
     
-    // 1. Add to local state immediately (Optimistic UI)
+    // Add to local state immediately (Optimistic UI)
     const tempMessage = {
       type: 'message',
       id: `temp-${Date.now()}`,
@@ -152,7 +170,7 @@ export default function Chat() {
     
     setMessages(prev => [...prev, tempMessage]);
 
-    // 2. Send via WebSocket
+    // Send via WebSocket
     websocket.sendMessage(messageText, selectedContact._id, selectedContact.displayName);
     
     setInputText('');
@@ -162,6 +180,13 @@ export default function Chat() {
     await logOut();
     websocket.disconnect();
     navigate('/login');
+  };
+
+  const handleSelectContact = (contact) => {
+    setSelectedContact(contact);
+    setShowMobileContacts(false);
+    // Clear unread count for this contact
+    setUnreadCounts(prev => ({ ...prev, [contact._id]: 0 }));
   };
 
   const getInitials = (name) => {
@@ -175,136 +200,252 @@ export default function Chat() {
 
   const getAvatarColor = (name) => {
     const colors = [
-      'from-purple-500 to-pink-500',
-      'from-blue-500 to-cyan-500',
-      'from-green-500 to-teal-500',
-      'from-orange-500 to-red-500',
-      'from-indigo-500 to-purple-500',
-      'from-pink-500 to-rose-500',
+      'from-violet-500 to-purple-600',
+      'from-blue-500 to-indigo-600',
+      'from-emerald-500 to-teal-600',
+      'from-orange-500 to-amber-600',
+      'from-pink-500 to-rose-600',
+      'from-cyan-500 to-blue-600',
     ];
     const index = name.charCodeAt(0) % colors.length;
     return colors[index];
   };
 
   return (
-    <div className="flex h-screen bg-gray-900">
+    <div className="flex h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       {/* Left Sidebar - Contact List */}
-      <div className="w-80 border-r border-gray-800 flex flex-col">
+      <div className={`${showMobileContacts ? 'flex' : 'hidden'} md:flex w-full md:w-96 border-r border-slate-800/50 flex-col bg-slate-900/50 backdrop-blur-xl`}>
+        {/* App Header */}
+        <div className="p-5 border-b border-slate-800/50 bg-gradient-to-r from-slate-900 to-slate-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-white">ChatApp</h1>
+                <p className="text-xs text-slate-400">Secure messaging</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+              <span className="text-xs text-slate-400">{connected ? 'Online' : 'Offline'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Current User */}
+        <div className="p-4 border-b border-slate-800/50">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50">
+            <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(currentUser?.displayName || 'U')} flex items-center justify-center shadow-lg`}>
+              <span className="text-white font-bold text-sm">
+                {getInitials(currentUser?.displayName || 'User')}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-white truncate">{currentUser?.displayName}</p>
+              <p className="text-xs text-slate-400 truncate">{currentUser?.email}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-lg hover:bg-slate-700 transition-colors group"
+              title="Logout"
+            >
+              <svg className="w-5 h-5 text-slate-400 group-hover:text-red-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Contact List */}
         <ContactList
           currentUser={currentUser}
           selectedContact={selectedContact}
-          onSelectContact={setSelectedContact}
+          onSelectContact={handleSelectContact}
+          unreadCounts={unreadCounts}
         />
       </div>
 
       {/* Right Panel - Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className={`${!showMobileContacts ? 'flex' : 'hidden'} md:flex flex-1 flex-col`}>
         {!selectedContact ? (
           /* No contact selected - Welcome screen */
-          <div className="flex-1 flex flex-col items-center justify-center bg-gray-900 text-gray-400">
-            <div className="w-32 h-32 bg-gradient-to-br from-purple-900 to-indigo-900 rounded-full flex items-center justify-center mb-6 shadow-2xl">
-              <svg className="w-16 h-16 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
+          <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-400 p-8">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-500/20 to-purple-600/20 rounded-full blur-3xl" />
+              <div className="relative w-32 h-32 bg-gradient-to-br from-violet-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-violet-500/25 transform rotate-3">
+                <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">ChatApp</h2>
-            <p className="text-gray-500">Select a contact to start chatting</p>
-            <button
-              onClick={handleLogout}
-              className="mt-8 px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-            >
-              Logout
-            </button>
+            <h2 className="text-3xl font-bold text-white mt-8 mb-3">Welcome to ChatApp</h2>
+            <p className="text-slate-400 text-center max-w-md mb-2">
+              Start a conversation by selecting a contact from the list.
+            </p>
+            <p className="text-slate-500 text-sm">
+              Your messages are private and secure.
+            </p>
+            <div className="flex gap-4 mt-8">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/50 border border-slate-700/50">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-sm text-slate-300">End-to-end encrypted</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/50 border border-slate-700/50">
+                <svg className="w-4 h-4 text-violet-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm text-slate-300">Secure connection</span>
+              </div>
+            </div>
           </div>
         ) : (
           <>
             {/* Chat Header */}
-            <div className="bg-gray-800 px-6 py-4 flex items-center justify-between border-b border-gray-700">
+            <div className="px-6 py-4 flex items-center justify-between border-b border-slate-800/50 bg-slate-900/80 backdrop-blur-xl">
               <div className="flex items-center gap-4">
-                <div
-                  className={`w-12 h-12 bg-gradient-to-br ${getAvatarColor(
-                    selectedContact.displayName
-                  )} rounded-full flex items-center justify-center shadow-lg`}
+                {/* Mobile back button */}
+                <button
+                  onClick={() => setShowMobileContacts(true)}
+                  className="md:hidden p-2 -ml-2 rounded-lg hover:bg-slate-800 transition-colors"
                 >
-                  <span className="text-white font-bold text-sm">
-                    {getInitials(selectedContact.displayName)}
-                  </span>
+                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+
+                <div className="relative">
+                  <div className={`w-12 h-12 bg-gradient-to-br ${getAvatarColor(selectedContact.displayName)} rounded-full flex items-center justify-center shadow-lg`}>
+                    <span className="text-white font-bold text-sm">
+                      {getInitials(selectedContact.displayName)}
+                    </span>
+                  </div>
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${connected ? 'bg-emerald-500' : 'bg-slate-500'}`} />
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-white">{selectedContact.displayName}</h2>
-                  <div className="flex items-center gap-2 text-sm">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        connected ? 'bg-green-500' : 'bg-red-500'
-                      }`}
-                    />
-                    <span className="text-gray-400">
-                      {connected ? 'Online' : 'Offline'}
-                    </span>
-                  </div>
+                  <p className="text-sm text-slate-400">
+                    {connected ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Active now
+                      </span>
+                    ) : (
+                      'Offline'
+                    )}
+                  </p>
                 </div>
               </div>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
-              >
-                Logout
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button className="p-2.5 rounded-xl hover:bg-slate-800 transition-colors group">
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-violet-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                </button>
+                <button className="p-2.5 rounded-xl hover:bg-slate-800 transition-colors group">
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-violet-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+                <button className="p-2.5 rounded-xl hover:bg-slate-800 transition-colors group">
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-violet-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* Error banner */}
             {error && (
-              <div className="bg-yellow-900 border-l-4 border-yellow-500 text-yellow-200 px-6 py-3">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  <span className="font-medium">{error}</span>
+              <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-200 px-6 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-1 rounded-full bg-amber-500/20">
+                    <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-medium">{error}</span>
                 </div>
               </div>
             )}
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-gray-900">
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-gradient-to-b from-slate-950 to-slate-900">
               {displayMessages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full">
-                  <div className="w-24 h-24 bg-gradient-to-br from-purple-900 to-indigo-900 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                    <svg className="w-12 h-12 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  <div className="w-20 h-20 bg-gradient-to-br from-slate-800 to-slate-700 rounded-2xl flex items-center justify-center mb-4 shadow-xl">
+                    <svg className="w-10 h-10 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
                   </div>
-                  <p className="text-gray-400 text-lg font-medium">No messages yet</p>
-                  <p className="text-gray-500 text-sm mt-1">Start the conversation!</p>
+                  <p className="text-slate-300 text-lg font-medium">No messages yet</p>
+                  <p className="text-slate-500 text-sm mt-1">Send a message to start the conversation</p>
                 </div>
               ) : (
-                displayMessages.map((msg) => (
-                  <MessageBubble
-                    key={msg.id || msg._id}
-                    message={msg}
-                    isOwn={msg.senderId === currentUser?.uid}
-                    currentUserName={currentUser?.displayName}
-                  />
-                ))
+                <>
+                  {/* Date separator */}
+                  <div className="flex items-center justify-center">
+                    <div className="px-4 py-1.5 rounded-full bg-slate-800/50 border border-slate-700/50">
+                      <span className="text-xs text-slate-400">Today</span>
+                    </div>
+                  </div>
+                  {displayMessages.map((msg) => (
+                    <MessageBubble
+                      key={msg.id || msg._id}
+                      message={msg}
+                      isOwn={msg.senderId === currentUser?.id}
+                      currentUserName={currentUser?.displayName}
+                    />
+                  ))}
+                </>
               )}
               <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}
-            <div className="bg-gray-800 border-t border-gray-700 px-6 py-4">
-              <form onSubmit={handleSend} className="flex gap-3 items-center">
-                <input
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Type a message..."
-                  disabled={!connected}
-                  className="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all text-white placeholder-gray-400"
-                  maxLength={1000}
-                />
+            <div className="px-6 py-4 border-t border-slate-800/50 bg-slate-900/80 backdrop-blur-xl">
+              <form onSubmit={handleSend} className="flex gap-3 items-end">
+                {/* Attachment button */}
+                <button
+                  type="button"
+                  className="p-3 rounded-xl hover:bg-slate-800 transition-colors group flex-shrink-0"
+                >
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-violet-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                </button>
+
+                {/* Input field */}
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder="Type a message..."
+                    disabled={!connected}
+                    className="w-full px-5 py-3.5 bg-slate-800/50 border border-slate-700/50 rounded-2xl focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 disabled:bg-slate-800/30 disabled:cursor-not-allowed transition-all text-white placeholder-slate-500 pr-12"
+                    maxLength={1000}
+                  />
+                  {/* Emoji button */}
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-slate-700/50 transition-colors"
+                  >
+                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Send button */}
                 <button
                   type="submit"
                   disabled={!connected || !inputText.trim()}
-                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none flex items-center gap-2"
+                  className="p-3.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl hover:from-violet-600 hover:to-purple-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transform hover:scale-105 disabled:transform-none disabled:shadow-none flex-shrink-0"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
