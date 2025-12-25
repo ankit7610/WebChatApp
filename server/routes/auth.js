@@ -42,8 +42,8 @@ router.post('/login', async (req, res) => {
     // Generate JWT for WebSocket authentication
     const token = jwt.sign(
       {
-        userId: user._id,
-        firebaseUid: user.firebaseUid,
+        userId: user.firebaseUid, // Use Firebase UID as the primary identifier
+        mongoId: user._id,
         username: user.displayName,
       },
       process.env.JWT_SECRET,
@@ -53,7 +53,7 @@ router.post('/login', async (req, res) => {
     res.json({
       token,
       user: {
-        id: user._id,
+        id: user.firebaseUid, // Use Firebase UID
         email: user.email,
         displayName: user.displayName,
       },
@@ -77,7 +77,7 @@ router.post('/verify', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId);
+    const user = await User.findOne({ firebaseUid: decoded.userId });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -86,7 +86,7 @@ router.post('/verify', async (req, res) => {
     res.json({
       valid: true,
       user: {
-        id: user._id,
+        id: user.firebaseUid,
         email: user.email,
         displayName: user.displayName,
       },

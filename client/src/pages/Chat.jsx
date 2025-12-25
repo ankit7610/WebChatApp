@@ -34,6 +34,9 @@ export default function Chat() {
       return;
     }
 
+    // Clear previous chat thread before loading new ones
+    setMessages([]);
+
     const token = getToken();
     if (!token) {
       navigate('/login');
@@ -79,9 +82,23 @@ export default function Chat() {
     // without adding dependencies that would cause reconnection
     websocket.on('message', (data) => {
       setMessages((prev) => {
-        // We need to check selectedContact here, but we can't access the state directly 
-        // if we don't want to re-run the effect. 
-        // Instead, we'll filter messages at the render level or use a ref for selectedContact.
+        // Prevent duplicates
+        const isDuplicate = prev.some(msg => msg.id === data.id);
+        if (isDuplicate) return prev;
+
+        // If we have a pending message with same text and recipient, replace it
+        const pendingIndex = prev.findIndex(msg => 
+          msg.pending && 
+          msg.text === data.text && 
+          msg.recipientId === data.recipientId
+        );
+
+        if (pendingIndex !== -1) {
+          const newMessages = [...prev];
+          newMessages[pendingIndex] = data;
+          return newMessages;
+        }
+
         return [...prev, data];
       });
     });
@@ -109,8 +126,8 @@ export default function Chat() {
   // Filter messages for display based on selected contact
   const displayMessages = messages.filter(msg => {
     if (!selectedContact) return false;
-    return (msg.senderId === currentUser?.uid && msg.recipientId === selectedContact._id) ||
-           (msg.senderId === selectedContact._id && msg.recipientId === currentUser?.uid);
+    return (msg.senderId === currentUser?.id && msg.recipientId === selectedContact._id) ||
+           (msg.senderId === selectedContact._id && msg.recipientId === currentUser?.id);
   });
 
   const handleSend = (e) => {
@@ -118,7 +135,26 @@ export default function Chat() {
 
     if (!inputText.trim() || !connected || !selectedContact) return;
 
-    websocket.sendMessage(inputText.trim(), selectedContact._id, selectedContact.displayName);
+    const messageText = inputText.trim();
+    
+    // 1. Add to local state immediately (Optimistic UI)
+    const tempMessage = {
+      type: 'message',
+      id: `temp-${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.displayName,
+      recipientId: selectedContact._id,
+      recipientName: selectedContact.displayName,
+      text: messageText,
+      createdAt: new Date().toISOString(),
+      pending: true
+    };
+    
+    setMessages(prev => [...prev, tempMessage]);
+
+    // 2. Send via WebSocket
+    websocket.sendMessage(messageText, selectedContact._id, selectedContact.displayName);
+    
     setInputText('');
   };
 
