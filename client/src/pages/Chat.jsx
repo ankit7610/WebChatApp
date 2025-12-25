@@ -20,9 +20,13 @@ export default function Chat() {
   const [showMobileContacts, setShowMobileContacts] = useState(true);
   const messagesEndRef = useRef(null);
   const selectedContactRef = useRef(null);
+  const currentUserRef = useRef(getCurrentUser()); // Use ref to hold currentUser
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
   const { theme, toggleTheme } = useTheme();
+
+  // Update currentUser ref on render, but don't trigger effects
+  currentUserRef.current = getCurrentUser();
+  const currentUser = currentUserRef.current;
 
   useEffect(() => {
     selectedContactRef.current = selectedContact;
@@ -86,6 +90,7 @@ export default function Chat() {
       });
   }, [selectedContact, navigate]);
 
+  // WebSocket Connection Effect
   useEffect(() => {
     const token = getToken();
 
@@ -94,19 +99,22 @@ export default function Chat() {
       return;
     }
 
+    console.log('Connecting to WebSocket...');
     websocket.connect(token);
 
-    websocket.on('open', () => {
+    // Define handlers
+    const handleOpen = () => {
+      console.log('WebSocket open event received');
       setConnected(true);
       setError('');
       refreshUnreadCounts();
-    });
+    };
 
-    websocket.on('connected', (data) => {
+    const handleConnected = (data) => {
       console.log('Connected as:', data.username);
-    });
+    };
 
-    websocket.on('message', (data) => {
+    const handleMessage = (data) => {
       console.log('📨 Received message:', data);
 
       setMessages((prev) => {
@@ -131,37 +139,64 @@ export default function Chat() {
       setLastMessageTime(Date.now());
 
       const currentSelected = selectedContactRef.current;
-      if (data.senderId !== currentUser?.id && data.senderId !== currentSelected?._id) {
+      const currentUser = currentUserRef.current;
+      
+      // Use _id or firebaseUid or id, whichever is available
+      const currentUserId = currentUser?.id || currentUser?._id || currentUser?.firebaseUid;
+
+      if (data.senderId !== currentUserId && data.senderId !== currentSelected?._id) {
         setUnreadCounts(prev => ({
           ...prev,
           [data.senderId]: (prev[data.senderId] || 0) + 1
         }));
       }
-    });
+    };
 
-    websocket.on('error', () => {
+    const handleError = () => {
+      console.log('WebSocket error event');
       setConnected(false);
       setError('Connection error. Reconnecting...');
-    });
+    };
 
-    websocket.on('close', () => {
+    const handleClose = () => {
+      console.log('WebSocket close event');
       setConnected(false);
       setError('Disconnected. Reconnecting...');
-    });
+    };
 
-    websocket.on('max_reconnect_reached', () => {
+    const handleMaxReconnect = () => {
       setError('Failed to reconnect. Please refresh the page.');
-    });
+    };
 
+    // Attach listeners
+    websocket.on('open', handleOpen);
+    websocket.on('connected', handleConnected);
+    websocket.on('message', handleMessage);
+    websocket.on('error', handleError);
+    websocket.on('close', handleClose);
+    websocket.on('max_reconnect_reached', handleMaxReconnect);
+
+    // Cleanup
     return () => {
+      console.log('Chat useEffect cleanup - removing listeners and disconnecting');
+      websocket.off('open', handleOpen);
+      websocket.off('connected', handleConnected);
+      websocket.off('message', handleMessage);
+      websocket.off('error', handleError);
+      websocket.off('close', handleClose);
+      websocket.off('max_reconnect_reached', handleMaxReconnect);
       websocket.disconnect();
     };
-  }, [navigate, currentUser?.id, refreshUnreadCounts]);
+  }, [navigate, refreshUnreadCounts]); // Removed currentUser from dependencies
 
   const displayMessages = messages.filter(msg => {
     if (!selectedContact) return false;
-    return (msg.senderId === currentUser?.id && msg.recipientId === selectedContact._id) ||
-           (msg.senderId === selectedContact._id && msg.recipientId === currentUser?.id);
+    // Use ref for current user to avoid dependency issues
+    const user = currentUserRef.current;
+    const userId = user?.id || user?._id || user?.firebaseUid;
+    
+    return (msg.senderId === userId && msg.recipientId === selectedContact._id) ||
+           (msg.senderId === selectedContact._id && msg.recipientId === userId);
   });
 
   const handleSend = (e) => {
@@ -170,12 +205,14 @@ export default function Chat() {
     if (!inputText.trim() || !connected || !selectedContact) return;
 
     const messageText = inputText.trim();
+    const user = currentUserRef.current;
+    const userId = user?.id || user?._id || user?.firebaseUid;
     
     const tempMessage = {
       type: 'message',
       id: `temp-${Date.now()}`,
-      senderId: currentUser.id,
-      senderName: currentUser.displayName,
+      senderId: userId,
+      senderName: user.displayName,
       recipientId: selectedContact._id,
       recipientName: selectedContact.displayName,
       text: messageText,
@@ -430,7 +467,7 @@ export default function Chat() {
                     <MessageBubble
                       key={msg.id || msg._id}
                       message={msg}
-                      isOwn={msg.senderId === currentUser?.id}
+                      isOwn={msg.senderId === (currentUser?.id || currentUser?._id || currentUser?.firebaseUid)}
                       currentUserName={currentUser?.displayName}
                       theme={theme}
                     />

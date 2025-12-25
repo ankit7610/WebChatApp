@@ -84,6 +84,9 @@ router.get('/:userId', authenticate, async (req, res) => {
  */
 router.post('/contacts', authenticate, async (req, res) => {
   try {
+    console.log('POST /contacts request body:', req.body);
+    console.log('Current user:', req.user.userId);
+    
     const { email } = req.body;
     const currentUserId = req.user.userId;
 
@@ -94,18 +97,31 @@ router.post('/contacts', authenticate, async (req, res) => {
     // Find the user by email
     const userToAdd = await User.findOne({ email });
     if (!userToAdd) {
+      console.log('User not found for email:', email);
       return res.status(404).json({ error: 'User not found' });
     }
+
+    console.log('Found user to add:', userToAdd.firebaseUid);
 
     if (userToAdd.firebaseUid === currentUserId) {
       return res.status(400).json({ error: 'Cannot add yourself' });
     }
 
     // Add to current user's contacts if not already present
-    await User.findOneAndUpdate(
+    const updatedUser = await User.findOneAndUpdate(
       { firebaseUid: currentUserId },
-      { $addToSet: { contacts: userToAdd.firebaseUid } }
+      { $addToSet: { contacts: userToAdd.firebaseUid } },
+      { new: true }
     );
+    
+    // Also add current user to the other user's contacts (Reciprocal add for WhatsApp-like behavior)
+    // This ensures both users see each other immediately
+    await User.findOneAndUpdate(
+      { firebaseUid: userToAdd.firebaseUid },
+      { $addToSet: { contacts: currentUserId } }
+    );
+    
+    console.log('Updated user contacts:', updatedUser.contacts);
 
     res.json({ 
       message: 'Contact added successfully',
