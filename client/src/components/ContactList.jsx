@@ -15,7 +15,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact }) => {
 
   const fetchUsersAndConversations = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('chatToken');
       const config = {
         headers: { Authorization: `Bearer ${token}` }
       };

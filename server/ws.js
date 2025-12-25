@@ -57,23 +57,6 @@ export const setupWebSocket = (server) => {
   });
 
   /**
-   * Broadcast online user count to all clients
-   */
-  const broadcastUserCount = () => {
-    const count = clients.size;
-    const message = JSON.stringify({
-      type: 'user_count',
-      count,
-    });
-
-    wss.clients.forEach((client) => {
-      if (client.readyState === 1) {
-        client.send(message);
-      }
-    });
-  };
-
-  /**
    * Handle new WebSocket connections
    */
   wss.on('connection', async (ws, req) => {
@@ -107,9 +90,6 @@ export const setupWebSocket = (server) => {
           username,
         })
       );
-
-      // Broadcast updated user count
-      broadcastUserCount();
 
     } catch (error) {
       console.error('WebSocket auth failed:', error.message);
@@ -165,28 +145,22 @@ export const setupWebSocket = (server) => {
             text: message.text,
             read: false,
             createdAt: message.createdAt,
+            timestamp: message.createdAt,
           };
 
           // Publish to Redis with recipient info (for multi-server support)
+          // The Redis subscriber will handle sending to both sender and recipient
           const redisClient = getRedisClient();
           await redisClient.publish(
             REDIS_CHANNEL,
             JSON.stringify(privateMessage)
           );
 
-          // Send to sender (confirmation)
-          ws.send(JSON.stringify(privateMessage));
-
-          // Send to recipient if they're connected to this server
-          const recipientWs = clients.get(recipientId);
-          if (recipientWs && recipientWs.readyState === 1) {
-            recipientWs.send(JSON.stringify(privateMessage));
-          }
-
           // BOT LOGIC: Check if recipient is a dummy user and auto-reply
           // We check if the recipient is not connected (likely a bot/offline user)
+          const recipientWs = clients.get(recipientId);
           if (!recipientWs) {
-            const recipientUser = await User.findById(recipientId);
+            const recipientUser = await User.findOne({ firebaseUid: recipientId });
             if (recipientUser && recipientUser.firebaseUid.startsWith('dummy_')) {
               setTimeout(async () => {
                 try {
@@ -213,12 +187,15 @@ export const setupWebSocket = (server) => {
                     text: replyText,
                     read: false,
                     createdAt: replyMessage.createdAt,
+                    timestamp: replyMessage.createdAt,
                   };
                   
-                  // Send reply to the original sender (who is currently connected)
-                  if (ws.readyState === 1) {
-                    ws.send(JSON.stringify(replyPayload));
-                  }
+                  // Publish bot reply to Redis
+                  const redisClient = getRedisClient();
+                  await redisClient.publish(
+                    REDIS_CHANNEL,
+                    JSON.stringify(replyPayload)
+                  );
                 } catch (err) {
                   console.error('Bot reply error:', err);
                 }
@@ -244,7 +221,6 @@ export const setupWebSocket = (server) => {
       if (userId) {
         clients.delete(userId);
         console.log(`❌ User disconnected: ${username} (${userId})`);
-        broadcastUserCount();
       }
     });
 

@@ -6,8 +6,7 @@ import mongoose from 'mongoose';
  */
 const messageSchema = new mongoose.Schema({
   senderId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: String, // Use Firebase UID (String)
     required: true,
   },
   senderName: {
@@ -15,8 +14,7 @@ const messageSchema = new mongoose.Schema({
     required: true,
   },
   recipientId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: String, // Use Firebase UID (String)
     required: true,
   },
   recipientName: {
