@@ -15,12 +15,12 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
 
   // On mount: load all users once and start periodic conversations refresh
   useEffect(() => {
-    fetchAllUsers();
-    const interval = setInterval(fetchConversations, 30000); // Refresh every 30s
+    fetchConversations();
+    const interval = setInterval(fetchConversations, 10000); // Refresh every 10s
     return () => clearInterval(interval);
   }, []);
 
-  // When lastMessageTime changes (e.g., refresh button), explicitly fetch latest conversations
+  // When lastMessageTime changes, explicitly fetch latest conversations
   useEffect(() => {
     if (lastMessageTime) {
       fetchConversations();
@@ -49,22 +49,23 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
       setConversations(prev => {
         const newData = res.data || [];
 
-        // Build a set of ids returned from server (support _id or firebaseUid)
-        const serverIds = new Set(newData.map(c => c.user._id || c.user.firebaseUid));
+        // Build a set of ids returned from server (strictly use firebaseUid)
+        const serverUids = new Set(newData.map(c => c.user.firebaseUid));
 
         // Preserve any optimistic/local entries that the server hasn't returned yet
         const preserved = prev.filter(c => {
-          const id = c.user._id || c.user.firebaseUid;
-          return id && !serverIds.has(id);
+          const uid = c.user.firebaseUid;
+          return uid && !serverUids.has(uid);
         });
 
         // Also ensure selectedContact is present (preserve from prev or create minimal)
         if (selectedContact) {
-          const selId = selectedContact._id || selectedContact.firebaseUid;
-          const existsOnServer = newData.find(c => (c.user._id || c.user.firebaseUid) === selId);
-          const existsLocally = preserved.find(c => (c.user._id || c.user.firebaseUid) === selId) || prev.find(c => (c.user._id || c.user.firebaseUid) === selId);
-          if (!existsOnServer && !existsLocally) {
-            preserved.unshift({ user: selectedContact, lastMessage: null, unreadCount: 0, userId: selId });
+          const selUid = selectedContact.firebaseUid;
+          const existsOnServer = newData.find(c => c.user.firebaseUid === selUid);
+          const existsLocally = preserved.find(c => c.user.firebaseUid === selUid);
+          
+          if (!existsOnServer && !existsLocally && selUid) {
+            preserved.unshift({ user: selectedContact, lastMessage: null, unreadCount: 0, userId: selUid });
           }
         }
 
@@ -81,23 +82,8 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   };
 
   // Note: browse-users functionality removed — contact list is populated from server conversations
-  // Fetch all signed-up users (server returns users except current user)
-  async function fetchAllUsers() {
-    try {
-      const token = localStorage.getItem('chatToken');
-      const url = `${API_URL}/api/contacts/all`;
-      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
-      const users = res.data || [];
+  // fetchAllUsers removed as fetchConversations now returns all users
 
-      const entries = users.map(u => ({ user: u, lastMessage: null, unreadCount: 0 }));
-      setConversations(entries);
-      setLoading(false);
-    } catch (err) {
-      console.error('Failed to fetch all users:', err);
-      // Fall back to conversations endpoint if available
-      fetchConversations();
-    }
-  }
 
   const getInitials = (name) => {
     return name
@@ -175,17 +161,8 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
-      {/* Header with Add Button */}
+      {/* Header with Search */}
       <div className="p-4 flex items-center gap-2">
-        <button
-          onClick={fetchConversations}
-          className={`p-3 rounded-xl transition-all ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-gray-500'}`}
-          title="Refresh List"
-        >
-          <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        </button>
         <div className="relative flex-1">
           <svg className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-slate-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />

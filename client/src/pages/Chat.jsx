@@ -62,6 +62,13 @@ export default function Chat() {
     }
   }, []);
 
+  // Auto-refresh unread counts every 10 seconds
+  useEffect(() => {
+    refreshUnreadCounts();
+    const interval = setInterval(refreshUnreadCounts, 10000);
+    return () => clearInterval(interval);
+  }, [refreshUnreadCounts]);
+
   useEffect(() => {
     if (!selectedContact) {
       setMessages([]);
@@ -306,17 +313,6 @@ export default function Chat() {
               </div>
             </div>
             
-            {/* Refresh Chats */}
-            <button
-              onClick={() => { setLastMessageTime(Date.now()); refreshUnreadCounts(); }}
-              className={`p-2.5 rounded-xl mr-2 transition-all duration-300 ${isDark ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-white hover:bg-gray-100 text-gray-700 shadow-md'}`}
-              title="Refresh chats"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582M20 20v-5h-.581M20.42 9a8 8 0 10-1.06 9.94L20 20" />
-              </svg>
-            </button>
-
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}

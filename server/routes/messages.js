@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
 
+import { getAuth } from '../config/firebase.js';
+
 const router = express.Router();
 
 /**
@@ -24,28 +26,7 @@ const authenticate = (req, res, next) => {
   }
 };
 
-/**
- * GET /api/messages/:peerUid
- * Fetch entire history with a specific user
- */
-router.get('/:peerUid', authenticate, async (req, res) => {
-  try {
-    const { peerUid } = req.params;
-    const currentUserUid = req.user.userId;
 
-    const messages = await Message.find({
-      $or: [
-        { senderId: currentUserUid, receiverId: peerUid },
-        { senderId: peerUid, receiverId: currentUserUid }
-      ]
-    }).sort({ timestamp: 1 });
-
-    res.json(messages);
-  } catch (error) {
-    console.error('Failed to fetch messages:', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
 
 /**
  * GET /api/messages/conversations
@@ -56,27 +37,22 @@ router.get('/conversations', authenticate, async (req, res) => {
   try {
     const userId = req.user.userId;
     
-    // 1. Get current user to access contacts list
-    const currentUser = await User.findOne({ firebaseUid: userId });
-    if (!currentUser) {
-        return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Extract contact UIDs from the contacts array (which contains objects {uid, email})
-    const contactUids = currentUser.contacts.map(c => c.uid);
+    // 1. Get all users except current user (to show everyone in the list)
+    const allUsers = await User.find({ firebaseUid: { $ne: userId } }).select('displayName email firebaseUid');
     
-    // 2. Also find anyone we have exchanged messages with, in case they are not in contacts (optional but good for robustness)
-    const sentMessages = await Message.distinct('receiverId', { senderId: userId });
-    const receivedMessages = await Message.distinct('senderId', { receiverId: userId });
-    
-    // Merge all UIDs
-    const allPartnerIds = [...new Set([...contactUids, ...sentMessages, ...receivedMessages])];
-    
-    // 3. Fetch details and last message for each partner
+    // 2. Fetch details and last message for each user
+    const auth = getAuth();
     const conversations = await Promise.all(
-      allPartnerIds.map(async (partnerId) => {
-        const partner = await User.findOne({ firebaseUid: partnerId }).select('displayName email firebaseUid');
-        if (!partner) return null;
+      allUsers.map(async (partner) => {
+        const partnerId = partner.firebaseUid;
+
+        // Verify user exists in Firebase
+        try {
+          await auth.getUser(partnerId);
+        } catch (err) {
+          console.log(`[Messages] Skipping deleted Firebase user: ${partnerId}`);
+          return null;
+        }
 
         const lastMessage = await Message.findOne({
           $or: [
@@ -121,6 +97,29 @@ router.get('/conversations', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Failed to fetch conversations:', error);
     res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+/**
+ * GET /api/messages/:peerUid
+ * Fetch entire history with a specific user
+ */
+router.get('/:peerUid', authenticate, async (req, res) => {
+  try {
+    const { peerUid } = req.params;
+    const currentUserUid = req.user.userId;
+
+    const messages = await Message.find({
+      $or: [
+        { senderId: currentUserUid, receiverId: peerUid },
+        { senderId: peerUid, receiverId: currentUserUid }
+      ]
+    }).sort({ timestamp: 1 });
+
+    res.json(messages);
+  } catch (error) {
+    console.error('Failed to fetch messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
 
