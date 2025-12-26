@@ -137,13 +137,16 @@ export default function Chat() {
       setMessages((prev) => {
         // Check if we already have this message (by ID or clientId)
         // If we find a match that is NOT pending, it's a duplicate -> ignore
-        const existingIndex = prev.findIndex(msg => msg.id === data.id || (data.clientId && msg.id === data.clientId));
+        const existingIndex = prev.findIndex(msg => 
+          msg.id === data.id || 
+          (data.clientId && msg.id === data.clientId)
+        );
         
         if (existingIndex !== -1) {
           // If the existing message is pending, we want to replace it (it's the confirmation)
           if (prev[existingIndex].pending) {
              const newMessages = [...prev];
-             newMessages[existingIndex] = { ...data }; // Replace pending with confirmed
+             newMessages[existingIndex] = { ...data, pending: false }; // Replace pending with confirmed
              return newMessages;
           }
           // Otherwise it's a true duplicate
@@ -159,11 +162,11 @@ export default function Chat() {
 
         if (pendingIndex !== -1) {
           const newMessages = [...prev];
-          newMessages[pendingIndex] = { ...data };
+          newMessages[pendingIndex] = { ...data, pending: false };
           return newMessages;
         }
 
-        return [...prev, data];
+        return [...prev, { ...data, pending: false }];
       });
 
       setLastMessageTime(Date.now());
