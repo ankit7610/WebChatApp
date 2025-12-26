@@ -9,11 +9,8 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Add Contact Modal State
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addEmail, setAddEmail] = useState('');
-  const [addError, setAddError] = useState('');
-  const [adding, setAdding] = useState(false);
+  // State for optional listing of all registered users
+  const [showingAllUsers, setShowingAllUsers] = useState(false);
 
   const isDark = theme === 'dark';
 
@@ -37,9 +34,37 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
         headers: { Authorization: `Bearer ${token}` }
       };
 
-      const res = await axios.get(`${API_URL}/api/messages/conversations`, config);
+      // Cache-bust to avoid 304 Not Modified responses from browser cache
+      const url = `${API_URL}/api/messages/conversations?cb=${Date.now()}`;
+      const res = await axios.get(url, config);
       console.log('Fetched conversations:', res.data);
-      setConversations(res.data);
+      
+      setConversations(prev => {
+        const newData = res.data || [];
+
+        // Build a set of ids returned from server (support _id or firebaseUid)
+        const serverIds = new Set(newData.map(c => c.user._id || c.user.firebaseUid));
+
+        // Preserve any optimistic/local entries that the server hasn't returned yet
+        const preserved = prev.filter(c => {
+          const id = c.user._id || c.user.firebaseUid;
+          return id && !serverIds.has(id);
+        });
+
+        // Also ensure selectedContact is present (preserve from prev or create minimal)
+        if (selectedContact) {
+          const selId = selectedContact._id || selectedContact.firebaseUid;
+          const existsOnServer = newData.find(c => (c.user._id || c.user.firebaseUid) === selId);
+          const existsLocally = preserved.find(c => (c.user._id || c.user.firebaseUid) === selId) || prev.find(c => (c.user._id || c.user.firebaseUid) === selId);
+          if (!existsOnServer && !existsLocally) {
+            preserved.unshift({ user: selectedContact, lastMessage: null, unreadCount: 0, userId: selId });
+          }
+        }
+
+        // Merge preserved (optimistic) entries before server data so they remain visible
+        return [...preserved, ...newData];
+      });
+      
       setLoading(false);
     } catch (error) {
       console.error('Failed to fetch conversations:', error);
@@ -48,48 +73,30 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
     }
   };
 
-  const handleAddContact = async (e) => {
-    e.preventDefault();
-    setAdding(true);
-    setAddError('');
-    console.log('Adding contact:', addEmail);
-
+  // Fetch all signed-up users (server returns users except current user)
+  const fetchAllUsers = async () => {
     try {
       const token = localStorage.getItem('chatToken');
-      const res = await axios.post(`${API_URL}/api/messages/contacts`, { email: addEmail }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      console.log('Add contact response:', res.data);
-      
-      // Optimistically add the new contact to the list immediately
-      if (res.data.user) {
-        const newContact = {
-          user: res.data.user,
-          lastMessage: null,
-          unreadCount: 0,
-          userId: res.data.user.firebaseUid || res.data.user._id
-        };
-        
-        setConversations(prev => {
-          // Check if already exists
-          if (prev.some(c => c.user._id === newContact.user._id)) {
-            return prev;
-          }
-          return [newContact, ...prev];
-        });
-      }
+      const url = `${API_URL}/api/contacts/all`;
+      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+      const users = res.data || [];
 
-      // Removed immediate fetch to prevent race condition where DB hasn't updated yet
-      // The background poller will eventually sync the list
-      // await fetchConversations();
-      
-      setShowAddModal(false);
-      setAddEmail('');
+      setConversations(prev => {
+        const existingIds = new Set(prev.map(c => c.user._id || c.user.firebaseUid));
+        const newEntries = users
+          .filter(u => {
+            const id = u._id || u.firebaseUid;
+            return id && !existingIds.has(id);
+          })
+          .map(u => ({ user: u, lastMessage: null, unreadCount: 0 }));
+
+        if (newEntries.length === 0) return prev;
+        return [...newEntries, ...prev];
+      });
+
+      setShowingAllUsers(true);
     } catch (err) {
-      console.error('Add contact error:', err);
-      setAddError(err.response?.data?.error || 'Failed to add contact');
-    } finally {
-      setAdding(false);
+      console.error('Failed to fetch all users:', err);
     }
   };
 
@@ -197,9 +204,9 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
           />
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={fetchAllUsers}
           className="p-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition-all hover:scale-105"
-          title="Add New Contact"
+          title="Browse Users"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -313,69 +320,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
         )}
       </div>
 
-      {/* Add Contact Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl transform transition-all scale-100 ${
-            isDark ? 'bg-slate-900 border border-slate-800' : 'bg-white'
-          }`}>
-            <h3 className={`text-xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Start New Chat
-            </h3>
-            
-            <form onSubmit={handleAddContact}>
-              <div className="mb-4">
-                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                  User Email
-                </label>
-                <input
-                  type="email"
-                  value={addEmail}
-                  onChange={(e) => setAddEmail(e.target.value)}
-                  placeholder="Enter email address"
-                  className={`w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-violet-500 focus:outline-none transition-all ${
-                    isDark 
-                      ? 'bg-slate-800 border border-slate-700 text-white placeholder-slate-500' 
-                      : 'bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-500'
-                  }`}
-                  required
-                />
-              </div>
-
-              {addError && (
-                <p className="text-red-500 text-sm mb-4 bg-red-500/10 p-3 rounded-lg border border-red-500/20">
-                  {addError}
-                </p>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setAddError('');
-                    setAddEmail('');
-                  }}
-                  className={`flex-1 py-3 rounded-xl font-medium transition-colors ${
-                    isDark 
-                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' 
-                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={adding}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-medium hover:shadow-lg hover:shadow-violet-500/30 transition-all disabled:opacity-50"
-                >
-                  {adding ? 'Adding...' : 'Start Chat'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Showing all users merged into conversation list when requested */}
     </div>
   );
 };
