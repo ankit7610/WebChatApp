@@ -9,8 +9,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // State for optional listing of all registered users
-  const [showingAllUsers, setShowingAllUsers] = useState(false);
+  // no-op: removed add-contact / browse-users UI
 
   const isDark = theme === 'dark';
 
@@ -73,32 +72,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
     }
   };
 
-  // Fetch all signed-up users (server returns users except current user)
-  const fetchAllUsers = async () => {
-    try {
-      const token = localStorage.getItem('chatToken');
-      const url = `${API_URL}/api/contacts/all`;
-      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
-      const users = res.data || [];
-
-      setConversations(prev => {
-        const existingIds = new Set(prev.map(c => c.user._id || c.user.firebaseUid));
-        const newEntries = users
-          .filter(u => {
-            const id = u._id || u.firebaseUid;
-            return id && !existingIds.has(id);
-          })
-          .map(u => ({ user: u, lastMessage: null, unreadCount: 0 }));
-
-        if (newEntries.length === 0) return prev;
-        return [...newEntries, ...prev];
-      });
-
-      setShowingAllUsers(true);
-    } catch (err) {
-      console.error('Failed to fetch all users:', err);
-    }
-  };
+  // Note: browse-users functionality removed — contact list is populated from server conversations
 
   const getInitials = (name) => {
     return name
@@ -203,15 +177,6 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
             }`}
           />
         </div>
-        <button
-          onClick={fetchAllUsers}
-          className="p-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition-all hover:scale-105"
-          title="Browse Users"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
       </div>
 
       {/* Section title */}
@@ -232,7 +197,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
             </div>
             <p className={`font-medium ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>No chats yet</p>
             <p className={`text-sm mt-1 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-              Click the + button to start a new chat
+              Start a conversation by selecting a user from the list
             </p>
           </div>
         ) : (
