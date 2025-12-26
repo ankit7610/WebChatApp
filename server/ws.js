@@ -132,6 +132,7 @@ export const setupWebSocket = (server) => {
             senderId: senderIdStr,
             receiverId: receiverIdStr,
             text: text.trim(),
+            clientId: payload.clientId || null,
             seen: false,
             timestamp: Date.now()
           });

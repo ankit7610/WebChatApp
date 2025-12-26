@@ -97,9 +97,15 @@ export default function Chat() {
           setMessages(prev => {
             const serverMessages = res.data;
             const serverIds = new Set(serverMessages.map(m => m._id));
+            const serverClientIds = new Set(serverMessages.map(m => m.clientId).filter(Boolean));
             
             // Keep pending messages that are not in server response
-            const pendingMessages = prev.filter(m => m.pending && !serverIds.has(m.id));
+            // We check if the pending message's ID (which is the clientId) exists in the server messages' clientIds
+            const pendingMessages = prev.filter(m => 
+              m.pending && 
+              !serverIds.has(m.id) && 
+              !serverClientIds.has(m.id)
+            );
             
             // Merge and sort
             const merged = [...serverMessages, ...pendingMessages];
