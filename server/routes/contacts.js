@@ -48,8 +48,21 @@ router.get('/', authenticate, async (req, res) => {
     // To get displayNames, we might need to fetch the user docs for these contacts
     const contactUids = user.contacts.map(c => c.uid);
     const contactDetails = await User.find({ firebaseUid: { $in: contactUids } }).select('displayName email firebaseUid');
-    
-    const formattedContacts = contactDetails.map(c => ({
+
+    // Filter out any contacts that no longer exist in Firebase Auth
+    const auth = getAuth();
+    const validated = [];
+    await Promise.all(contactDetails.map(async (c) => {
+      try {
+        await auth.getUser(c.firebaseUid);
+        validated.push(c);
+      } catch (err) {
+        // user not found in Firebase -> skip
+        console.log(`[Contacts] Removing stale contact not in Firebase: ${c.firebaseUid}`);
+      }
+    }));
+
+    const formattedContacts = validated.map(c => ({
       uid: c.firebaseUid,
       email: c.email,
       displayName: c.displayName
@@ -71,7 +84,19 @@ router.get('/all', authenticate, async (req, res) => {
     const currentUid = req.user.userId;
     const users = await User.find({ firebaseUid: { $ne: currentUid } }).select('displayName email firebaseUid');
 
-    const formatted = users.map(u => ({
+    // Validate users still exist in Firebase Auth and filter out deleted accounts
+    const auth = getAuth();
+    const validated = [];
+    await Promise.all(users.map(async (u) => {
+      try {
+        await auth.getUser(u.firebaseUid);
+        validated.push(u);
+      } catch (err) {
+        console.log(`[Contacts] Skipping deleted Firebase user: ${u.firebaseUid}`);
+      }
+    }));
+
+    const formatted = validated.map(u => ({
       _id: u._id,
       firebaseUid: u.firebaseUid,
       displayName: u.displayName,
