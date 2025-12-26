@@ -300,7 +300,25 @@ openssl rand -base64 32
 
 ---
 
-## 🧪 Testing the App
+## 🧪 Testing
+
+### Running Tests
+
+**Frontend Tests (Playwright):**
+```bash
+cd client
+npm test              # Run all tests
+npm run test:ui       # Interactive UI mode
+npm run test:headed   # See browser while running
+```
+
+**Backend Tests:**
+```bash
+cd server
+npm test
+```
+
+### Manual Testing
 
 1. Open your Vercel URL in a browser
 2. Click **Sign up** and create an account
@@ -309,7 +327,6 @@ openssl rand -base64 32
 5. Create another account and login
 6. Send messages between the two users
 7. Verify real-time delivery
-8. Check online user count updates
 
 ---
 
@@ -482,6 +499,15 @@ ChatApp/
 │   ├── render.yaml          # Render deployment config
 │   └── .env.example
 │
+├── .github/
+│   └── workflows/
+│       └── ci.yml            # CI/CD pipeline
+├── client/
+│   ├── tests/                # Frontend E2E tests
+│   └── ...
+├── server/
+│   ├── tests.js              # Backend tests
+│   └── ...
 ├── .gitignore
 └── README.md
 ```
