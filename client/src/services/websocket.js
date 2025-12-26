@@ -110,12 +110,12 @@ class WebSocketService {
   /**
    * Send chat message
    */
-  sendMessage(text, recipientId, recipientName) {
+  sendMessage(text, receiverId, clientId) {
     this.send({
       type: 'message',
       text,
-      recipientId,
-      recipientName,
+      receiverId,
+      clientId,
     });
   }
 
