@@ -23,6 +23,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   // When lastMessageTime changes (e.g., refresh button), explicitly fetch latest conversations
   useEffect(() => {
     if (lastMessageTime) {
+      fetchAllUsers();
       fetchConversations();
     }
   }, [lastMessageTime]);
@@ -85,12 +86,25 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   async function fetchAllUsers() {
     try {
       const token = localStorage.getItem('chatToken');
-      const url = `${API_URL}/api/contacts/all`;
-      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+      const url = `${API_URL}/api/contacts/all?cb=${Date.now()}`;
+      const res = await axios.get(url, { 
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        } 
+      });
       const users = res.data || [];
 
-      const entries = users.map(u => ({ user: u, lastMessage: null, unreadCount: 0 }));
-      setConversations(entries);
+      setConversations(prev => {
+        return users.map(u => {
+          const uid = u._id || u.firebaseUid;
+          const existing = prev.find(c => (c.user._id || c.user.firebaseUid) === uid);
+          if (existing) {
+            return { ...existing, user: u };
+          }
+          return { user: u, lastMessage: null, unreadCount: 0 };
+        });
+      });
       setLoading(false);
     } catch (err) {
       console.error('Failed to fetch all users:', err);

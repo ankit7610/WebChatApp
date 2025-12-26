@@ -24,28 +24,7 @@ const authenticate = (req, res, next) => {
   }
 };
 
-/**
- * GET /api/messages/:peerUid
- * Fetch entire history with a specific user
- */
-router.get('/:peerUid', authenticate, async (req, res) => {
-  try {
-    const { peerUid } = req.params;
-    const currentUserUid = req.user.userId;
 
-    const messages = await Message.find({
-      $or: [
-        { senderId: currentUserUid, receiverId: peerUid },
-        { senderId: peerUid, receiverId: currentUserUid }
-      ]
-    }).sort({ timestamp: 1 });
-
-    res.json(messages);
-  } catch (error) {
-    console.error('Failed to fetch messages:', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
 
 /**
  * GET /api/messages/conversations
@@ -121,6 +100,29 @@ router.get('/conversations', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Failed to fetch conversations:', error);
     res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+/**
+ * GET /api/messages/:peerUid
+ * Fetch entire history with a specific user
+ */
+router.get('/:peerUid', authenticate, async (req, res) => {
+  try {
+    const { peerUid } = req.params;
+    const currentUserUid = req.user.userId;
+
+    const messages = await Message.find({
+      $or: [
+        { senderId: currentUserUid, receiverId: peerUid },
+        { senderId: peerUid, receiverId: currentUserUid }
+      ]
+    }).sort({ timestamp: 1 });
+
+    res.json(messages);
+  } catch (error) {
+    console.error('Failed to fetch messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
 
