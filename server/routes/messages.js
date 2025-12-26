@@ -37,26 +37,15 @@ router.get('/conversations', authenticate, async (req, res) => {
   try {
     const userId = req.user.userId;
     
-    // 1. Get current user to access contacts list
-    const currentUser = await User.findOne({ firebaseUid: userId });
-    if (!currentUser) {
-        return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Extract contact UIDs from the contacts array (which contains objects {uid, email})
-    const contactUids = currentUser.contacts.map(c => c.uid);
+    // 1. Get all users except current user (to show everyone in the list)
+    const allUsers = await User.find({ firebaseUid: { $ne: userId } }).select('displayName email firebaseUid');
     
-    // 2. Also find anyone we have exchanged messages with, in case they are not in contacts (optional but good for robustness)
-    const sentMessages = await Message.distinct('receiverId', { senderId: userId });
-    const receivedMessages = await Message.distinct('senderId', { receiverId: userId });
-    
-    // Merge all UIDs
-    const allPartnerIds = [...new Set([...contactUids, ...sentMessages, ...receivedMessages])];
-    
-    // 3. Fetch details and last message for each partner
+    // 2. Fetch details and last message for each user
     const auth = getAuth();
     const conversations = await Promise.all(
-      allPartnerIds.map(async (partnerId) => {
+      allUsers.map(async (partner) => {
+        const partnerId = partner.firebaseUid;
+
         // Verify user exists in Firebase
         try {
           await auth.getUser(partnerId);
@@ -64,9 +53,6 @@ router.get('/conversations', authenticate, async (req, res) => {
           console.log(`[Messages] Skipping deleted Firebase user: ${partnerId}`);
           return null;
         }
-
-        const partner = await User.findOne({ firebaseUid: partnerId }).select('displayName email firebaseUid');
-        if (!partner) return null;
 
         const lastMessage = await Message.findOne({
           $or: [

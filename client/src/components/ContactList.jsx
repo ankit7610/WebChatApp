@@ -15,15 +15,14 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
 
   // On mount: load all users once and start periodic conversations refresh
   useEffect(() => {
-    fetchAllUsers();
-    const interval = setInterval(fetchConversations, 30000); // Refresh every 30s
+    fetchConversations();
+    const interval = setInterval(fetchConversations, 10000); // Refresh every 10s
     return () => clearInterval(interval);
   }, []);
 
-  // When lastMessageTime changes (e.g., refresh button), explicitly fetch latest conversations
+  // When lastMessageTime changes, explicitly fetch latest conversations
   useEffect(() => {
     if (lastMessageTime) {
-      fetchAllUsers();
       fetchConversations();
     }
   }, [lastMessageTime]);
@@ -83,51 +82,8 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   };
 
   // Note: browse-users functionality removed — contact list is populated from server conversations
-  // Fetch all signed-up users (server returns users except current user)
-  async function fetchAllUsers() {
-    try {
-      const token = localStorage.getItem('chatToken');
-      const url = `${API_URL}/api/contacts/all?cb=${Date.now()}`;
-      const res = await axios.get(url, { 
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        } 
-      });
-      const users = res.data || [];
+  // fetchAllUsers removed as fetchConversations now returns all users
 
-      setConversations(prev => {
-        // Create a map of existing conversations by firebaseUid for easy lookup
-        const prevMap = new Map(prev.map(c => [c.user.firebaseUid, c]));
-        
-        // Map new users to conversation objects, preserving existing data if available
-        const merged = users.map(u => {
-          const uid = u.firebaseUid;
-          const existing = prevMap.get(uid);
-          
-          if (existing) {
-            // Update user details but keep message history/unread count
-            return { ...existing, user: u };
-          }
-          // New user found
-          return { user: u, lastMessage: null, unreadCount: 0, userId: uid };
-        });
-        
-        // Also keep any conversations that are NOT in the users list (e.g. if users list is partial)
-        // But since this is "fetchAllUsers", we generally trust it. 
-        // However, if we have a conversation with someone not in the list (e.g. deleted user?), 
-        // we might want to keep it or let it drop. 
-        // Given the requirement to remove deleted users, we should probably ONLY return `merged`.
-        
-        return merged;
-      });
-      setLoading(false);
-    } catch (err) {
-      console.error('Failed to fetch all users:', err);
-      // Fall back to conversations endpoint if available
-      fetchConversations();
-    }
-  }
 
   const getInitials = (name) => {
     return name
@@ -205,17 +161,8 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
-      {/* Header with Add Button */}
+      {/* Header with Search */}
       <div className="p-4 flex items-center gap-2">
-        <button
-          onClick={fetchConversations}
-          className={`p-3 rounded-xl transition-all ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-gray-500'}`}
-          title="Refresh List"
-        >
-          <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        </button>
         <div className="relative flex-1">
           <svg className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-slate-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
