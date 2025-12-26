@@ -36,6 +36,38 @@ export default function MessageBubble({ message, isOwn, senderName: propSenderNa
   const senderName = propSenderName || message.senderName || message.username || 'Unknown';
   const isPending = message.pending;
 
+  // Status Icon Component
+  const StatusIcon = () => {
+    if (isPending) {
+      return (
+        <svg className="w-3 h-3 text-violet-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+    }
+
+    if (message.seen) {
+      // Double Blue Tick
+      return (
+        <div className="flex relative w-[19px] h-3.5">
+          <svg className="w-3.5 h-3.5 text-[#53bdeb] absolute left-0 bottom-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+          </svg>
+          <svg className="w-3.5 h-3.5 text-[#53bdeb] absolute left-[5px] bottom-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+      );
+    }
+
+    // Single Grey/White Tick (Sent)
+    return (
+      <svg className="w-3.5 h-3.5 text-violet-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+      </svg>
+    );
+  };
+
   return (
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} animate-fade-in`}>
       <div className={`flex gap-2.5 max-w-[75%] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -61,7 +93,7 @@ export default function MessageBubble({ message, isOwn, senderName: propSenderNa
 
           {/* Message Bubble */}
           <div
-            className={`relative px-4 py-2.5 shadow-lg transition-all ${
+            className={`relative px-4 py-2 shadow-lg transition-all ${
               isOwn
                 ? 'bg-gradient-to-br from-violet-500 to-purple-600 text-white rounded-2xl rounded-br-md'
                 : isDark
@@ -70,12 +102,12 @@ export default function MessageBubble({ message, isOwn, senderName: propSenderNa
             } ${isPending ? 'opacity-70 scale-95' : 'scale-100'}`}
           >
             {/* Message text */}
-            <p className="text-sm leading-relaxed break-words whitespace-pre-wrap max-w-prose">
+            <p className="text-sm leading-relaxed break-words whitespace-pre-wrap max-w-prose pr-2">
               {message.text}
             </p>
 
             {/* Time and status */}
-            <div className={`flex items-center gap-1.5 mt-1.5 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+            <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
               <span className={`text-[10px] font-medium ${
                 isOwn 
                   ? 'text-violet-200' 
@@ -84,15 +116,8 @@ export default function MessageBubble({ message, isOwn, senderName: propSenderNa
                 {formatTime(message.timestamp)}
               </span>
               {isOwn && (
-                <div className={`flex items-center ml-1 ${message.seen ? 'text-cyan-300' : 'text-violet-200'}`}>
-                  {message.seen ? (
-                    <div className="flex -space-x-1.5">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
-                    </div>
-                  ) : (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
-                  )}
+                <div className="ml-0.5">
+                  <StatusIcon />
                 </div>
               )}
             </div>
