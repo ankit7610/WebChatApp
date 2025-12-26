@@ -417,8 +417,12 @@ export default function Chat() {
             <div className={`px-6 py-4 flex items-center justify-between border-b ${isDark ? 'border-slate-800 bg-slate-900' : 'border-gray-200 bg-white'} shadow-sm`}>
               <div className="flex items-center gap-4">
                 <button
-                  onClick={() => setShowMobileContacts(true)}
-                  className={`md:hidden p-2 -ml-2 rounded-lg transition-colors ${isDark ? 'hover:bg-slate-800' : 'hover:bg-gray-100'}`}
+                  onClick={() => {
+                    setShowMobileContacts(true);
+                    setSelectedContact(null);
+                  }}
+                  className={`p-2 -ml-2 rounded-lg transition-colors ${isDark ? 'hover:bg-slate-800' : 'hover:bg-gray-100'}`}
+                  title="Back to contacts"
                 >
                   <svg className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
