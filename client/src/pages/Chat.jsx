@@ -89,16 +89,40 @@ export default function Chat() {
     const contactId = selectedContact.firebaseUid || selectedContact._id || selectedContact.id;
 
     // Use new API endpoint: /api/messages/:peerUid
-    axios.get(`${API_URL}/api/messages/${contactId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then((res) => {
-        setMessages(res.data);
+    const fetchMessages = () => {
+      axios.get(`${API_URL}/api/messages/${contactId}`, {
+        headers: { Authorization: `Bearer ${token}` }
       })
-      .catch((err) => {
-        console.error('Failed to load conversation:', err);
-        setError('Failed to load conversation history');
-      });
+        .then((res) => {
+          setMessages(prev => {
+            const serverMessages = res.data;
+            const serverIds = new Set(serverMessages.map(m => m._id));
+            const serverClientIds = new Set(serverMessages.map(m => m.clientId).filter(Boolean));
+            
+            // Keep pending messages that are not in server response
+            // We check if the pending message's ID (which is the clientId) exists in the server messages' clientIds
+            const pendingMessages = prev.filter(m => 
+              m.pending && 
+              !serverIds.has(m.id) && 
+              !serverClientIds.has(m.id)
+            );
+            
+            // Merge and sort
+            const merged = [...serverMessages, ...pendingMessages];
+            merged.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            return merged;
+          });
+        })
+        .catch((err) => {
+          console.error('Failed to load conversation:', err);
+          if (messages.length === 0) setError('Failed to load conversation history');
+        });
+    };
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 1000); // Poll every 1s for read receipts
+    
+    return () => clearInterval(interval);
   }, [selectedContact, navigate]);
 
   // WebSocket Connection Effect

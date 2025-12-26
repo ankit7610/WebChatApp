@@ -18,6 +18,10 @@ const messageSchema = new mongoose.Schema({
     required: true,
     maxlength: 1000,
   },
+  clientId: {
+    type: String,
+    required: false,
+  },
   seen: {
     type: Boolean,
     default: false,
