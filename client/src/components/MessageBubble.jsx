@@ -1,7 +1,8 @@
-export default function MessageBubble({ message, isOwn, currentUserName, theme }) {
+export default function MessageBubble({ message, isOwn, senderName: propSenderName, theme }) {
   const isDark = theme === 'dark';
 
   const formatTime = (timestamp) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
@@ -32,7 +33,7 @@ export default function MessageBubble({ message, isOwn, currentUserName, theme }
     return colors[index];
   };
 
-  const senderName = message.senderName || message.username;
+  const senderName = propSenderName || message.senderName || message.username || 'Unknown';
   const isPending = message.pending;
 
   return (
@@ -80,7 +81,7 @@ export default function MessageBubble({ message, isOwn, currentUserName, theme }
                   ? 'text-violet-200' 
                   : isDark ? 'text-slate-500' : 'text-gray-500'
               }`}>
-                {formatTime(message.createdAt)}
+                {formatTime(message.timestamp)}
               </span>
               {isOwn && (
                 <div className="flex items-center">

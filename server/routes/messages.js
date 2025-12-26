@@ -25,139 +25,54 @@ const authenticate = (req, res, next) => {
 };
 
 /**
- * GET /api/messages/users
- * Get list of all users (for contact list)
+ * GET /api/messages/:peerUid
+ * Fetch entire history with a specific user
  */
-router.get('/users', authenticate, async (req, res) => {
+router.get('/:peerUid', authenticate, async (req, res) => {
   try {
-    const users = await User.find({ firebaseUid: { $ne: req.user.userId } })
-      .select('displayName email firebaseUid')
-      .lean();
+    const { peerUid } = req.params;
+    const currentUserUid = req.user.userId;
 
-    // Map firebaseUid to _id for frontend compatibility if needed, 
-    // but we'll use firebaseUid as the primary ID now
-    const formattedUsers = users.map(u => ({
-      ...u,
-      _id: u.firebaseUid // Use firebaseUid as the ID
-    }));
-
-    res.json(formattedUsers);
-  } catch (error) {
-    console.error('Failed to fetch users:', error.message);
-    res.status(500).json({ error: 'Failed to fetch users' });
-  }
-});
-
-/**
- * GET /api/messages/conversation/:userId
- * Get conversation with a specific user
- */
-router.get('/conversation/:userId', authenticate, async (req, res) => {
-  try {
-    const { userId } = req.params; // This is now a firebaseUid
-    
-    const messages = await Message.getConversation(req.user.userId, userId);
+    const messages = await Message.find({
+      $or: [
+        { senderId: currentUserUid, receiverId: peerUid },
+        { senderId: peerUid, receiverId: currentUserUid }
+      ]
+    }).sort({ timestamp: 1 });
 
     res.json(messages);
   } catch (error) {
-    console.error('Failed to fetch conversation:', error.message);
-    res.status(500).json({ error: 'Failed to fetch conversation' });
-  }
-});
-
-/**
- * Alias for GET /api/messages/conversation/:userId
- */
-router.get('/:userId', authenticate, async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const messages = await Message.getConversation(req.user.userId, userId);
-    res.json(messages);
-  } catch (error) {
+    console.error('Failed to fetch messages:', error);
     res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
 
 /**
- * POST /api/messages/contacts
- * Add a user to contacts by email
- */
-router.post('/contacts', authenticate, async (req, res) => {
-  try {
-    console.log('POST /contacts request body:', req.body);
-    console.log('Current user:', req.user.userId);
-    
-    const { email } = req.body;
-    const currentUserId = req.user.userId;
-
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
-    }
-
-    // Find the user by email
-    const userToAdd = await User.findOne({ email });
-    if (!userToAdd) {
-      console.log('User not found for email:', email);
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    console.log('Found user to add:', userToAdd.firebaseUid);
-
-    if (userToAdd.firebaseUid === currentUserId) {
-      return res.status(400).json({ error: 'Cannot add yourself' });
-    }
-
-    // Add to current user's contacts if not already present
-    const updatedUser = await User.findOneAndUpdate(
-      { firebaseUid: currentUserId },
-      { $addToSet: { contacts: userToAdd.firebaseUid } },
-      { new: true }
-    );
-    
-    // Also add current user to the other user's contacts (Reciprocal add for WhatsApp-like behavior)
-    // This ensures both users see each other immediately
-    await User.findOneAndUpdate(
-      { firebaseUid: userToAdd.firebaseUid },
-      { $addToSet: { contacts: currentUserId } }
-    );
-    
-    console.log('Updated user contacts:', updatedUser.contacts);
-
-    res.json({ 
-      message: 'Contact added successfully',
-      user: {
-        _id: userToAdd.firebaseUid,
-        displayName: userToAdd.displayName,
-        email: userToAdd.email,
-        firebaseUid: userToAdd.firebaseUid
-      }
-    });
-  } catch (error) {
-    console.error('Failed to add contact:', error.message);
-    res.status(500).json({ error: 'Failed to add contact' });
-  }
-});
-
-/**
  * GET /api/messages/conversations
- * Get list of all conversations and contacts with last message preview
+ * Get list of all contacts with last message preview
+ * MUST show all contacts regardless of message history
  */
 router.get('/conversations', authenticate, async (req, res) => {
   try {
-    const userId = req.user.userId; // This is now a firebaseUid
+    const userId = req.user.userId;
     
-    // Get current user to access contacts
+    // 1. Get current user to access contacts list
     const currentUser = await User.findOne({ firebaseUid: userId });
-    const contactIds = currentUser?.contacts || [];
+    if (!currentUser) {
+        return res.status(404).json({ error: 'User not found' });
+    }
 
-    // Get all unique conversation partners
-    const sentMessages = await Message.distinct('recipientId', { senderId: userId });
-    const receivedMessages = await Message.distinct('senderId', { recipientId: userId });
+    // Extract contact UIDs from the contacts array (which contains objects {uid, email})
+    const contactUids = currentUser.contacts.map(c => c.uid);
     
-    // Merge conversation partners and manually added contacts
-    const allPartnerIds = [...new Set([...sentMessages, ...receivedMessages, ...contactIds])];
+    // 2. Also find anyone we have exchanged messages with, in case they are not in contacts (optional but good for robustness)
+    const sentMessages = await Message.distinct('receiverId', { senderId: userId });
+    const receivedMessages = await Message.distinct('senderId', { receiverId: userId });
     
-    // Get user details and last message for each conversation/contact
+    // Merge all UIDs
+    const allPartnerIds = [...new Set([...contactUids, ...sentMessages, ...receivedMessages])];
+    
+    // 3. Fetch details and last message for each partner
     const conversations = await Promise.all(
       allPartnerIds.map(async (partnerId) => {
         const partner = await User.findOne({ firebaseUid: partnerId }).select('displayName email firebaseUid');
@@ -165,21 +80,23 @@ router.get('/conversations', authenticate, async (req, res) => {
 
         const lastMessage = await Message.findOne({
           $or: [
-            { senderId: userId, recipientId: partnerId },
-            { senderId: partnerId, recipientId: userId }
+            { senderId: userId, receiverId: partnerId },
+            { senderId: partnerId, receiverId: userId }
           ]
-        }).sort({ createdAt: -1 });
+        }).sort({ timestamp: -1 });
         
         const unreadCount = await Message.countDocuments({
           senderId: partnerId,
-          recipientId: userId,
-          read: false
+          receiverId: userId,
+          seen: false
         });
 
         return {
           user: {
-            ...partner.toObject(),
-            _id: partner.firebaseUid
+            _id: partner.firebaseUid,
+            displayName: partner.displayName,
+            email: partner.email,
+            firebaseUid: partner.firebaseUid
           },
           lastMessage,
           unreadCount,
@@ -188,21 +105,21 @@ router.get('/conversations', authenticate, async (req, res) => {
       })
     );
 
-    // Filter out nulls and sort by last message time
+    // Filter nulls and sort
     const validConversations = conversations.filter(c => c !== null);
+    
     validConversations.sort((a, b) => {
-      const timeA = a.lastMessage?.createdAt || 0;
-      const timeB = b.lastMessage?.createdAt || 0;
-      // If times are equal (e.g. both 0), sort by name
+      const timeA = a.lastMessage?.timestamp || 0;
+      const timeB = b.lastMessage?.timestamp || 0;
       if (timeA === timeB) {
         return a.user.displayName.localeCompare(b.user.displayName);
       }
-      return new Date(timeB) - new Date(timeA);
+      return timeB - timeA;
     });
 
     res.json(validConversations);
   } catch (error) {
-    console.error('Failed to fetch conversations:', error.message);
+    console.error('Failed to fetch conversations:', error);
     res.status(500).json({ error: 'Failed to fetch conversations' });
   }
 });
