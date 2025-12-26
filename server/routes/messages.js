@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
 
+import { getAuth } from '../config/firebase.js';
+
 const router = express.Router();
 
 /**
@@ -52,8 +54,17 @@ router.get('/conversations', authenticate, async (req, res) => {
     const allPartnerIds = [...new Set([...contactUids, ...sentMessages, ...receivedMessages])];
     
     // 3. Fetch details and last message for each partner
+    const auth = getAuth();
     const conversations = await Promise.all(
       allPartnerIds.map(async (partnerId) => {
+        // Verify user exists in Firebase
+        try {
+          await auth.getUser(partnerId);
+        } catch (err) {
+          console.log(`[Messages] Skipping deleted Firebase user: ${partnerId}`);
+          return null;
+        }
+
         const partner = await User.findOne({ firebaseUid: partnerId }).select('displayName email firebaseUid');
         if (!partner) return null;
 

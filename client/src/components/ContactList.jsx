@@ -50,22 +50,23 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
       setConversations(prev => {
         const newData = res.data || [];
 
-        // Build a set of ids returned from server (support _id or firebaseUid)
-        const serverIds = new Set(newData.map(c => c.user._id || c.user.firebaseUid));
+        // Build a set of ids returned from server (strictly use firebaseUid)
+        const serverUids = new Set(newData.map(c => c.user.firebaseUid));
 
         // Preserve any optimistic/local entries that the server hasn't returned yet
         const preserved = prev.filter(c => {
-          const id = c.user._id || c.user.firebaseUid;
-          return id && !serverIds.has(id);
+          const uid = c.user.firebaseUid;
+          return uid && !serverUids.has(uid);
         });
 
         // Also ensure selectedContact is present (preserve from prev or create minimal)
         if (selectedContact) {
-          const selId = selectedContact._id || selectedContact.firebaseUid;
-          const existsOnServer = newData.find(c => (c.user._id || c.user.firebaseUid) === selId);
-          const existsLocally = preserved.find(c => (c.user._id || c.user.firebaseUid) === selId) || prev.find(c => (c.user._id || c.user.firebaseUid) === selId);
-          if (!existsOnServer && !existsLocally) {
-            preserved.unshift({ user: selectedContact, lastMessage: null, unreadCount: 0, userId: selId });
+          const selUid = selectedContact.firebaseUid;
+          const existsOnServer = newData.find(c => c.user.firebaseUid === selUid);
+          const existsLocally = preserved.find(c => c.user.firebaseUid === selUid);
+          
+          if (!existsOnServer && !existsLocally && selUid) {
+            preserved.unshift({ user: selectedContact, lastMessage: null, unreadCount: 0, userId: selUid });
           }
         }
 
@@ -96,14 +97,29 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
       const users = res.data || [];
 
       setConversations(prev => {
-        return users.map(u => {
-          const uid = u._id || u.firebaseUid;
-          const existing = prev.find(c => (c.user._id || c.user.firebaseUid) === uid);
+        // Create a map of existing conversations by firebaseUid for easy lookup
+        const prevMap = new Map(prev.map(c => [c.user.firebaseUid, c]));
+        
+        // Map new users to conversation objects, preserving existing data if available
+        const merged = users.map(u => {
+          const uid = u.firebaseUid;
+          const existing = prevMap.get(uid);
+          
           if (existing) {
+            // Update user details but keep message history/unread count
             return { ...existing, user: u };
           }
-          return { user: u, lastMessage: null, unreadCount: 0 };
+          // New user found
+          return { user: u, lastMessage: null, unreadCount: 0, userId: uid };
         });
+        
+        // Also keep any conversations that are NOT in the users list (e.g. if users list is partial)
+        // But since this is "fetchAllUsers", we generally trust it. 
+        // However, if we have a conversation with someone not in the list (e.g. deleted user?), 
+        // we might want to keep it or let it drop. 
+        // Given the requirement to remove deleted users, we should probably ONLY return `merged`.
+        
+        return merged;
       });
       setLoading(false);
     } catch (err) {
