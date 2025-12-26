@@ -13,12 +13,19 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
 
   const isDark = theme === 'dark';
 
+  // On mount: load all users once and start periodic conversations refresh
   useEffect(() => {
-    // Load all signed-up users by default, then refresh conversations periodically
     fetchAllUsers();
     const interval = setInterval(fetchConversations, 30000); // Refresh every 30s
     return () => clearInterval(interval);
-  }, [lastMessageTime]); // Re-fetch when a new message arrives
+  }, []);
+
+  // When lastMessageTime changes (e.g., refresh button), explicitly fetch latest conversations
+  useEffect(() => {
+    if (lastMessageTime) {
+      fetchConversations();
+    }
+  }, [lastMessageTime]);
 
   // Re-fetch when unreadCounts change (to update order if needed)
   useEffect(() => {
@@ -31,7 +38,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
     try {
       const token = localStorage.getItem('chatToken');
       const config = {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}`, 'Cache-Control': 'no-cache' }
       };
 
       // Cache-bust to avoid 304 Not Modified responses from browser cache
