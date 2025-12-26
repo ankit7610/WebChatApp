@@ -128,19 +128,29 @@ export default function Chat() {
       }
 
       setMessages((prev) => {
-        const isDuplicate = prev.some(msg => msg.id === data.id);
+        const isDuplicate = prev.some(msg => msg.id === data.id || (data.clientId && msg.id === data.clientId));
         if (isDuplicate) return prev;
 
-        // Check for pending message to replace (optimistic update confirmation)
+        // Prefer matching pending messages by clientId (reliable)
+        if (data.clientId) {
+          const pendingIndex = prev.findIndex(msg => msg.pending && msg.id === data.clientId);
+          if (pendingIndex !== -1) {
+            const newMessages = [...prev];
+            newMessages[pendingIndex] = { ...data };
+            return newMessages;
+          }
+        }
+
+        // Fallback: match by text + receiverId (older heuristic)
         const pendingIndex = prev.findIndex(msg => 
           msg.pending && 
           msg.text === data.text && 
-          msg.receiverId === data.receiverId
+          (msg.receiverId === data.receiverId || msg.receiverId === data.receiverId)
         );
 
         if (pendingIndex !== -1) {
           const newMessages = [...prev];
-          newMessages[pendingIndex] = data;
+          newMessages[pendingIndex] = { ...data };
           return newMessages;
         }
 
@@ -234,7 +244,7 @@ export default function Chat() {
     };
     
     setMessages(prev => [...prev, tempMessage]);
-    websocket.sendMessage(messageText, contactId);
+    websocket.sendMessage(messageText, contactId, tempMessage.id);
     
     setInputText('');
   };
