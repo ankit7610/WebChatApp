@@ -14,7 +14,8 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   const isDark = theme === 'dark';
 
   useEffect(() => {
-    fetchConversations();
+    // Load all signed-up users by default, then refresh conversations periodically
+    fetchAllUsers();
     const interval = setInterval(fetchConversations, 30000); // Refresh every 30s
     return () => clearInterval(interval);
   }, [lastMessageTime]); // Re-fetch when a new message arrives
@@ -73,6 +74,23 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   };
 
   // Note: browse-users functionality removed — contact list is populated from server conversations
+  // Fetch all signed-up users (server returns users except current user)
+  async function fetchAllUsers() {
+    try {
+      const token = localStorage.getItem('chatToken');
+      const url = `${API_URL}/api/contacts/all`;
+      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+      const users = res.data || [];
+
+      const entries = users.map(u => ({ user: u, lastMessage: null, unreadCount: 0 }));
+      setConversations(entries);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to fetch all users:', err);
+      // Fall back to conversations endpoint if available
+      fetchConversations();
+    }
+  }
 
   const getInitials = (name) => {
     return name
