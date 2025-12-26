@@ -16,7 +16,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
   // On mount: load all users once and start periodic conversations refresh
   useEffect(() => {
     fetchConversations();
-    const interval = setInterval(fetchConversations, 10000); // Refresh every 10s
+    const interval = setInterval(fetchConversations, 1000); // Refresh every 1s
     return () => clearInterval(interval);
   }, []);
 

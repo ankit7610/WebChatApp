@@ -62,10 +62,10 @@ export default function Chat() {
     }
   }, []);
 
-  // Auto-refresh unread counts every 10 seconds
+  // Auto-refresh unread counts every 1 second
   useEffect(() => {
     refreshUnreadCounts();
-    const interval = setInterval(refreshUnreadCounts, 10000);
+    const interval = setInterval(refreshUnreadCounts, 1000);
     return () => clearInterval(interval);
   }, [refreshUnreadCounts]);
 

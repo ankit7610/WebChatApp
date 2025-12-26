@@ -109,6 +109,12 @@ router.get('/:peerUid', authenticate, async (req, res) => {
     const { peerUid } = req.params;
     const currentUserUid = req.user.userId;
 
+    // Mark messages from peer as seen
+    await Message.updateMany(
+      { senderId: peerUid, receiverId: currentUserUid, seen: false },
+      { $set: { seen: true } }
+    );
+
     const messages = await Message.find({
       $or: [
         { senderId: currentUserUid, receiverId: peerUid },
