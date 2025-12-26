@@ -8,6 +8,7 @@ import { initializeFirebase } from './config/firebase.js';
 import { setupWebSocket } from './ws.js';
 import authRoutes from './routes/auth.js';
 import messageRoutes from './routes/messages.js';
+import contactRoutes from './routes/contacts.js';
 
 /**
  * Main Server Entry Point
@@ -33,6 +34,12 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Request logger
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -41,6 +48,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/contacts', contactRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -20,7 +20,8 @@ const userSchema = new mongoose.Schema({
     required: true,
   },
   contacts: [{
-    type: String, // Stores firebaseUid of contacts
+    uid: { type: String, required: true },
+    email: { type: String, required: true }
   }],
   createdAt: {
     type: Date,

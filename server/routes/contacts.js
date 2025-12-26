@@ -63,6 +63,29 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 /**
+ * GET /api/contacts/all
+ * Return all users who have signed up (except the requester)
+ */
+router.get('/all', authenticate, async (req, res) => {
+  try {
+    const currentUid = req.user.userId;
+    const users = await User.find({ firebaseUid: { $ne: currentUid } }).select('displayName email firebaseUid');
+
+    const formatted = users.map(u => ({
+      _id: u._id,
+      firebaseUid: u.firebaseUid,
+      displayName: u.displayName,
+      email: u.email,
+    }));
+
+    res.json(formatted);
+  } catch (error) {
+    console.error('Failed to fetch all users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+/**
  * POST /api/contacts/add
  * Add a new contact by email
  */

@@ -7,6 +7,11 @@ import admin from 'firebase-admin';
  */
 export const initializeFirebase = () => {
   try {
+    if (admin.apps.length > 0) {
+      console.log('✅ Firebase Admin already initialized');
+      return;
+    }
+
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     
     admin.initializeApp({
@@ -16,9 +21,10 @@ export const initializeFirebase = () => {
     console.log('✅ Firebase Admin initialized');
   } catch (error) {
     console.error('❌ Firebase initialization error:', error.message);
-    throw error;
   }
 };
+
+export const getAuth = () => admin.auth();
 
 export const verifyFirebaseToken = async (idToken) => {
   try {

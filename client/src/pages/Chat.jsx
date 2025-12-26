@@ -128,24 +128,26 @@ export default function Chat() {
       }
 
       setMessages((prev) => {
-        const isDuplicate = prev.some(msg => msg.id === data.id || (data.clientId && msg.id === data.clientId));
-        if (isDuplicate) return prev;
-
-        // Prefer matching pending messages by clientId (reliable)
-        if (data.clientId) {
-          const pendingIndex = prev.findIndex(msg => msg.pending && msg.id === data.clientId);
-          if (pendingIndex !== -1) {
-            const newMessages = [...prev];
-            newMessages[pendingIndex] = { ...data };
-            return newMessages;
+        // Check if we already have this message (by ID or clientId)
+        // If we find a match that is NOT pending, it's a duplicate -> ignore
+        const existingIndex = prev.findIndex(msg => msg.id === data.id || (data.clientId && msg.id === data.clientId));
+        
+        if (existingIndex !== -1) {
+          // If the existing message is pending, we want to replace it (it's the confirmation)
+          if (prev[existingIndex].pending) {
+             const newMessages = [...prev];
+             newMessages[existingIndex] = { ...data }; // Replace pending with confirmed
+             return newMessages;
           }
+          // Otherwise it's a true duplicate
+          return prev;
         }
 
-        // Fallback: match by text + receiverId (older heuristic)
+        // Fallback: match by text + receiverId (older heuristic) if clientId didn't match
         const pendingIndex = prev.findIndex(msg => 
           msg.pending && 
           msg.text === data.text && 
-          (msg.receiverId === data.receiverId || msg.receiverId === data.receiverId)
+          (msg.receiverId === data.receiverId)
         );
 
         if (pendingIndex !== -1) {
