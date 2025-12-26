@@ -78,7 +78,11 @@ export default function Chat() {
 
     setUnreadCounts(prev => ({ ...prev, [selectedContact._id]: 0 }));
 
-    axios.get(`${API_URL}/api/messages/conversation/${selectedContact._id}`, {
+    // Normalize contact id (prefer firebaseUid when present)
+    const contactId = selectedContact.firebaseUid || selectedContact._id || selectedContact.id;
+
+    // Use new API endpoint: /api/messages/:peerUid
+    axios.get(`${API_URL}/api/messages/${contactId}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then((res) => {
@@ -117,14 +121,21 @@ export default function Chat() {
     const handleMessage = (data) => {
       console.log('📨 Received message:', data);
 
+      if (data.type === 'contact_added') {
+        console.log('New contact added, refreshing list...');
+        setLastMessageTime(Date.now()); // Triggers ContactList refresh
+        return;
+      }
+
       setMessages((prev) => {
         const isDuplicate = prev.some(msg => msg.id === data.id);
         if (isDuplicate) return prev;
 
+        // Check for pending message to replace (optimistic update confirmation)
         const pendingIndex = prev.findIndex(msg => 
           msg.pending && 
           msg.text === data.text && 
-          msg.recipientId === data.recipientId
+          msg.receiverId === data.receiverId
         );
 
         if (pendingIndex !== -1) {
@@ -142,7 +153,7 @@ export default function Chat() {
       const currentUser = currentUserRef.current;
       
       // Use _id or firebaseUid or id, whichever is available
-      const currentUserId = currentUser?.id || currentUser?._id || currentUser?.firebaseUid;
+      const currentUserId = currentUser?.firebaseUid || currentUser?.id || currentUser?._id;
 
       if (data.senderId !== currentUserId && data.senderId !== currentSelected?._id) {
         setUnreadCounts(prev => ({
@@ -193,10 +204,12 @@ export default function Chat() {
     if (!selectedContact) return false;
     // Use ref for current user to avoid dependency issues
     const user = currentUserRef.current;
-    const userId = user?.id || user?._id || user?.firebaseUid;
-    
-    return (msg.senderId === userId && msg.recipientId === selectedContact._id) ||
-           (msg.senderId === selectedContact._id && msg.recipientId === userId);
+    const userId = user?.firebaseUid || user?.id || user?._id;
+    const contactId = selectedContact.firebaseUid || selectedContact._id || selectedContact.id;
+
+    // Check both directions: Me -> Contact OR Contact -> Me
+    return (msg.senderId === userId && msg.receiverId === contactId) ||
+           (msg.senderId === contactId && msg.receiverId === userId);
   });
 
   const handleSend = (e) => {
@@ -208,20 +221,20 @@ export default function Chat() {
     const user = currentUserRef.current;
     const userId = user?.id || user?._id || user?.firebaseUid;
     
+    const contactId = selectedContact.firebaseUid || selectedContact._id || selectedContact.id;
+
     const tempMessage = {
       type: 'message',
       id: `temp-${Date.now()}`,
       senderId: userId,
-      senderName: user.displayName,
-      recipientId: selectedContact._id,
-      recipientName: selectedContact.displayName,
+      receiverId: contactId,
       text: messageText,
-      createdAt: new Date().toISOString(),
+      timestamp: Date.now(),
       pending: true
     };
     
     setMessages(prev => [...prev, tempMessage]);
-    websocket.sendMessage(messageText, selectedContact._id, selectedContact.displayName);
+    websocket.sendMessage(messageText, contactId);
     
     setInputText('');
   };
@@ -468,7 +481,7 @@ export default function Chat() {
                       key={msg.id || msg._id}
                       message={msg}
                       isOwn={msg.senderId === (currentUser?.id || currentUser?._id || currentUser?.firebaseUid)}
-                      currentUserName={currentUser?.displayName}
+                      senderName={selectedContact.displayName}
                       theme={theme}
                     />
                   ))}
