@@ -14,25 +14,10 @@ export const setupWebSocket = (server) => {
   const clients = new Map(); // userId -> ws connection
 
   /**
-   * Subscribe to Redis channel for messages from other server instances
+   * Handle messages (from Redis or local fallback)
    */
-  const redisSub = getRedisSub();
-  redisSub.subscribe(REDIS_CHANNEL, (err) => {
-    if (err) {
-      console.error('Failed to subscribe to Redis channel:', err);
-    } else {
-      console.log(`✅ Subscribed to Redis channel: ${REDIS_CHANNEL}`);
-    }
-  });
-
-  /**
-   * Handle messages from Redis (sent by other server instances)
-   */
-  redisSub.on('message', async (channel, message) => {
+  const handleRemoteMessage = async (data) => {
     try {
-      if (channel === REDIS_CHANNEL) {
-        const data = JSON.parse(message);
-        
         // For private messages, only send to sender and receiver
         if (data.type === 'message' && data.senderId && data.receiverId) {
           const senderWs = clients.get(data.senderId);
@@ -62,7 +47,11 @@ export const setupWebSocket = (server) => {
               };
               
               const redisClient = getRedisClient();
-              await redisClient.publish(REDIS_CHANNEL, JSON.stringify(receipt));
+              if (redisClient && redisClient.status === 'ready') {
+                await redisClient.publish(REDIS_CHANNEL, JSON.stringify(receipt));
+              } else {
+                handleRemoteMessage(receipt);
+              }
             } catch (err) {
               console.error('Error updating delivery status:', err);
             }
@@ -77,6 +66,14 @@ export const setupWebSocket = (server) => {
           }
         }
 
+        // Handle seen receipt
+        if (data.type === 'seen_receipt' && data.senderId) {
+          const senderWs = clients.get(data.senderId);
+          if (senderWs && senderWs.readyState === 1) {
+            senderWs.send(JSON.stringify(data));
+          }
+        }
+
         // Handle new contact notification
         if (data.type === 'contact_added' && data.recipientId) {
           const recipientWs = clients.get(data.recipientId);
@@ -84,11 +81,40 @@ export const setupWebSocket = (server) => {
             recipientWs.send(JSON.stringify(data));
           }
         }
-      }
     } catch (error) {
-      console.error('Error in Redis message handler:', error);
+      console.error('Error in message handler:', error);
     }
-  });
+  };
+
+  /**
+   * Subscribe to Redis channel for messages from other server instances
+   */
+  const redisSub = getRedisSub();
+  if (redisSub) {
+    redisSub.subscribe(REDIS_CHANNEL, (err) => {
+      if (err) {
+        console.error('Failed to subscribe to Redis channel:', err);
+      } else {
+        console.log(`✅ Subscribed to Redis channel: ${REDIS_CHANNEL}`);
+      }
+    });
+
+    /**
+     * Handle messages from Redis (sent by other server instances)
+     */
+    redisSub.on('message', async (channel, message) => {
+      try {
+        if (channel === REDIS_CHANNEL) {
+          const data = JSON.parse(message);
+          await handleRemoteMessage(data);
+        }
+      } catch (error) {
+        console.error('Error in Redis message handler:', error);
+      }
+    });
+  } else {
+    console.warn('⚠️ Redis subscriber not available. Running in single-instance mode.');
+  }
 
   /**
    * Handle new WebSocket connections
@@ -153,7 +179,13 @@ export const setupWebSocket = (server) => {
                receiverId: userId,
                timestamp: Date.now()
              };
-             await redisClient.publish(REDIS_CHANNEL, JSON.stringify(receipt));
+             
+             const redisClient = getRedisClient();
+             if (redisClient && redisClient.status === 'ready') {
+               await redisClient.publish(REDIS_CHANNEL, JSON.stringify(receipt));
+             } else {
+               handleRemoteMessage(receipt);
+             }
           }
         }
       } catch (err) {
@@ -222,14 +254,15 @@ export const setupWebSocket = (server) => {
 
           // Publish to Redis
           const redisClient = getRedisClient();
-          if (redisClient) {
+          if (redisClient && redisClient.status === 'ready') {
             await redisClient.publish(
               REDIS_CHANNEL,
               JSON.stringify(privateMessage)
             );
             console.log(`📡 Published message to Redis: ${message._id}`);
           } else {
-            console.error('❌ Redis client not available');
+            console.warn('⚠️ Redis client not available. Handling message locally.');
+            handleRemoteMessage(privateMessage);
           }
         }
       } catch (error) {

@@ -2,10 +2,12 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
+import { getRedisClient } from '../config/redis.js';
 
 import { getAuth } from '../config/firebase.js';
 
 const router = express.Router();
+const REDIS_CHANNEL = 'chat:messages';
 
 /**
  * Middleware: Verify JWT token
@@ -110,10 +112,29 @@ router.get('/:peerUid', authenticate, async (req, res) => {
     const currentUserUid = req.user.userId;
 
     // Mark messages from peer as seen
-    await Message.updateMany(
+    const result = await Message.updateMany(
       { senderId: peerUid, receiverId: currentUserUid, seen: false },
       { $set: { seen: true } }
     );
+
+    if (result.modifiedCount > 0) {
+      // Notify the sender (peerUid) that their messages were seen by currentUserUid
+      try {
+        const redisClient = getRedisClient();
+        const seenReceipt = {
+          type: 'seen_receipt',
+          senderId: peerUid, // The one who should receive the notification
+          receiverId: currentUserUid, // The one who read the messages
+          timestamp: Date.now()
+        };
+        
+        if (redisClient && redisClient.status === 'ready') {
+             await redisClient.publish(REDIS_CHANNEL, JSON.stringify(seenReceipt));
+        }
+      } catch (err) {
+        console.error('Failed to send seen receipt:', err);
+      }
+    }
 
     const messages = await Message.find({
       $or: [
