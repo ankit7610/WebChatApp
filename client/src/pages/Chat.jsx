@@ -158,6 +158,18 @@ export default function Chat() {
         return;
       }
 
+      if (data.type === 'delivery_receipt') {
+        console.log('📨 Received delivery receipt:', data);
+        setMessages(prev => prev.map(msg => {
+          if (msg._id === data.messageId || msg.id === data.messageId) {
+            console.log('✅ Updating message as delivered:', msg.id);
+            return { ...msg, delivered: true };
+          }
+          return msg;
+        }));
+        return;
+      }
+
       setMessages((prev) => {
         // Check if we already have this message (by ID or clientId)
         // If we find a match that is NOT pending, it's a duplicate -> ignore

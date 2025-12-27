@@ -28,31 +28,65 @@ export const setupWebSocket = (server) => {
   /**
    * Handle messages from Redis (sent by other server instances)
    */
-  redisSub.on('message', (channel, message) => {
-    if (channel === REDIS_CHANNEL) {
-      const data = JSON.parse(message);
-      
-      // For private messages, only send to sender and receiver
-      if (data.type === 'message' && data.senderId && data.receiverId) {
-        const senderWs = clients.get(data.senderId);
-        const receiverWs = clients.get(data.receiverId);
+  redisSub.on('message', async (channel, message) => {
+    try {
+      if (channel === REDIS_CHANNEL) {
+        const data = JSON.parse(message);
         
-        if (senderWs && senderWs.readyState === 1) {
-          senderWs.send(JSON.stringify(data));
+        // For private messages, only send to sender and receiver
+        if (data.type === 'message' && data.senderId && data.receiverId) {
+          const senderWs = clients.get(data.senderId);
+          const receiverWs = clients.get(data.receiverId);
+          
+          if (senderWs && senderWs.readyState === 1) {
+            senderWs.send(JSON.stringify(data));
+          } else {
+            console.log(`⚠️ Sender ${data.senderId} not connected or not ready`);
+          }
+          
+          if (receiverWs && receiverWs.readyState === 1) {
+            receiverWs.send(JSON.stringify(data));
+            
+            // Mark as delivered if recipient is connected
+            try {
+              console.log(`✅ Recipient ${data.receiverId} is online. Marking message ${data.id} as delivered.`);
+              await Message.findByIdAndUpdate(data.id, { delivered: true });
+              
+              // Send delivery receipt to sender
+              const receipt = {
+                type: 'delivery_receipt',
+                messageId: data.id,
+                senderId: data.senderId,
+                receiverId: data.receiverId,
+                timestamp: Date.now()
+              };
+              
+              const redisClient = getRedisClient();
+              await redisClient.publish(REDIS_CHANNEL, JSON.stringify(receipt));
+            } catch (err) {
+              console.error('Error updating delivery status:', err);
+            }
+          }
         }
-        
-        if (receiverWs && receiverWs.readyState === 1) {
-          receiverWs.send(JSON.stringify(data));
-        }
-      }
 
-      // Handle new contact notification
-      if (data.type === 'contact_added' && data.recipientId) {
-        const recipientWs = clients.get(data.recipientId);
-        if (recipientWs && recipientWs.readyState === 1) {
-          recipientWs.send(JSON.stringify(data));
+        // Handle delivery receipt
+        if (data.type === 'delivery_receipt' && data.senderId) {
+          const senderWs = clients.get(data.senderId);
+          if (senderWs && senderWs.readyState === 1) {
+            senderWs.send(JSON.stringify(data));
+          }
+        }
+
+        // Handle new contact notification
+        if (data.type === 'contact_added' && data.recipientId) {
+          const recipientWs = clients.get(data.recipientId);
+          if (recipientWs && recipientWs.readyState === 1) {
+            recipientWs.send(JSON.stringify(data));
+          }
         }
       }
+    } catch (error) {
+      console.error('Error in Redis message handler:', error);
     }
   });
 
@@ -80,7 +114,7 @@ export const setupWebSocket = (server) => {
 
       // Store connection
       clients.set(userId, ws);
-      console.log(`✅ User connected: ${username} (${userId})`);
+      console.log(`✅ User connected: ${username} (${userId}) - Total clients: ${clients.size}`);
 
       // Send welcome message
       ws.send(
@@ -90,6 +124,41 @@ export const setupWebSocket = (server) => {
           username,
         })
       );
+
+      // Handle pending deliveries
+      try {
+        console.log(`🔍 Checking pending messages for receiver: ${userId}`);
+        const pendingMessages = await Message.find({ 
+          receiverId: userId, 
+          delivered: { $ne: true } 
+        });
+        
+        console.log(`found ${pendingMessages.length} pending messages`);
+
+        if (pendingMessages.length > 0) {
+          await Message.updateMany(
+            { receiverId: userId, delivered: { $ne: true } },
+            { $set: { delivered: true } }
+          );
+          
+          const redisClient = getRedisClient();
+          
+          // Notify senders
+          for (const msg of pendingMessages) {
+             console.log(`📤 Sending delivery receipt for msg ${msg._id} to sender ${msg.senderId}`);
+             const receipt = {
+               type: 'delivery_receipt',
+               messageId: msg._id,
+               senderId: msg.senderId,
+               receiverId: userId,
+               timestamp: Date.now()
+             };
+             await redisClient.publish(REDIS_CHANNEL, JSON.stringify(receipt));
+          }
+        }
+      } catch (err) {
+        console.error('Error handling pending deliveries:', err);
+      }
 
     } catch (error) {
       console.error('WebSocket auth failed:', error.message);
@@ -153,10 +222,15 @@ export const setupWebSocket = (server) => {
 
           // Publish to Redis
           const redisClient = getRedisClient();
-          await redisClient.publish(
-            REDIS_CHANNEL,
-            JSON.stringify(privateMessage)
-          );
+          if (redisClient) {
+            await redisClient.publish(
+              REDIS_CHANNEL,
+              JSON.stringify(privateMessage)
+            );
+            console.log(`📡 Published message to Redis: ${message._id}`);
+          } else {
+            console.error('❌ Redis client not available');
+          }
         }
       } catch (error) {
         console.error('Message handling error:', error.message);
@@ -175,7 +249,7 @@ export const setupWebSocket = (server) => {
     ws.on('close', () => {
       if (userId) {
         clients.delete(userId);
-        console.log(`❌ User disconnected: ${username} (${userId})`);
+        console.log(`❌ User disconnected: ${username} (${userId}) - Total clients: ${clients.size}`);
       }
     });
 
