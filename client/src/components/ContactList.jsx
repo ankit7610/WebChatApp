@@ -140,8 +140,8 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
 
     if (unreadA !== unreadB) return unreadB - unreadA;
 
-    const timeA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
-    const timeB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+    const timeA = a.lastMessage?.timestamp ? new Date(a.lastMessage.timestamp).getTime() : 0;
+    const timeB = b.lastMessage?.timestamp ? new Date(b.lastMessage.timestamp).getTime() : 0;
 
     if (timeA !== timeB) return timeB - timeA;
 
@@ -259,7 +259,7 @@ const ContactList = ({ currentUser, selectedContact, onSelectContact, unreadCoun
                             ? 'text-violet-500 font-medium' 
                             : isDark ? 'text-slate-500' : 'text-gray-500'
                         }`}>
-                          {formatTime(conv.lastMessage.createdAt)}
+                          {formatTime(conv.lastMessage.timestamp)}
                         </span>
                       )}
                     </div>

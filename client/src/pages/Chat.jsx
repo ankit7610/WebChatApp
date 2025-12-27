@@ -110,6 +110,12 @@ export default function Chat() {
             // Merge and sort
             const merged = [...serverMessages, ...pendingMessages];
             merged.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            // Optimization: Prevent unnecessary updates if data hasn't changed
+            if (JSON.stringify(prev) === JSON.stringify(merged)) {
+              return prev;
+            }
+            
             return merged;
           });
         })
@@ -120,7 +126,7 @@ export default function Chat() {
     };
 
     fetchMessages();
-    const interval = setInterval(fetchMessages, 1000); // Poll every 1s for read receipts
+    const interval = setInterval(fetchMessages, 2000); // Poll every 2s for read receipts
     
     return () => clearInterval(interval);
   }, [selectedContact, navigate]);
@@ -164,6 +170,18 @@ export default function Chat() {
           if (msg._id === data.messageId || msg.id === data.messageId) {
             console.log('✅ Updating message as delivered:', msg.id);
             return { ...msg, delivered: true };
+          }
+          return msg;
+        }));
+        return;
+      }
+
+      if (data.type === 'seen_receipt') {
+        console.log('👀 Received seen receipt:', data);
+        setMessages(prev => prev.map(msg => {
+          // Mark all messages sent to the person who just read them as seen
+          if (msg.receiverId === data.receiverId) {
+            return { ...msg, seen: true, delivered: true };
           }
           return msg;
         }));
