@@ -60,6 +60,20 @@ export default function MessageBubble({ message, isOwn, senderName: propSenderNa
       );
     }
 
+    if (message.delivered === true || message.delivered === 'true') {
+      // Double Grey Tick
+      return (
+        <div className="flex relative w-[19px] h-3.5" title="Delivered">
+          <svg className="w-3.5 h-3.5 text-violet-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+          </svg>
+          <svg className="w-3.5 h-3.5 text-violet-200 absolute left-[5px] bottom-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+      );
+    }
+
     // Single Grey/White Tick (Sent)
     return (
       <svg className="w-3.5 h-3.5 text-violet-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
