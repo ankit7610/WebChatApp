@@ -9,6 +9,7 @@ import { setupWebSocket } from './ws.js';
 import authRoutes from './routes/auth.js';
 import messageRoutes from './routes/messages.js';
 import contactRoutes from './routes/contacts.js';
+import { authLimiter, contactLimiter, generalLimiter } from './middleware/rateLimiter.js';
 
 /**
  * Main Server Entry Point
@@ -34,6 +35,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Apply general rate limiter to all routes
+app.use(generalLimiter);
+
 // Request logger
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
@@ -46,7 +50,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/contacts', contactRoutes);
 
@@ -68,7 +72,7 @@ const startServer = async () => {
   try {
     // Initialize services
     console.log('🚀 Starting server...');
-    
+
     await connectDB();
     connectRedis();
     initializeFirebase();

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { getRedisClient } from '../config/redis.js';
 import { getAuth } from '../config/firebase.js';
+import { contactLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 const REDIS_CHANNEL = 'chat:messages';
@@ -38,7 +39,7 @@ router.get('/', authenticate, async (req, res) => {
   try {
     const userId = req.user.userId;
     const user = await User.findOne({ firebaseUid: userId });
-    
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -114,7 +115,7 @@ router.get('/all', authenticate, async (req, res) => {
  * POST /api/contacts/add
  * Add a new contact by email
  */
-router.post('/add', authenticate, async (req, res) => {
+router.post('/add', contactLimiter, authenticate, async (req, res) => {
   try {
     const { addEmail } = req.body; // Prompt says "addEmail"
     const currentUserUid = req.user.userId;
@@ -126,7 +127,7 @@ router.post('/add', authenticate, async (req, res) => {
     }
 
     if (req.user.email === addEmail) {
-        return res.status(400).json({ error: 'Cannot add yourself' });
+      return res.status(400).json({ error: 'Cannot add yourself' });
     }
 
     // 1. Validate email exists in Firebase Auth
@@ -202,7 +203,7 @@ router.post('/add', authenticate, async (req, res) => {
     const updatedUser = await User.findOne({ firebaseUid: currentUserUid });
     const contactUids = updatedUser.contacts.map(c => c.uid);
     const contactDetails = await User.find({ firebaseUid: { $in: contactUids } }).select('displayName email firebaseUid');
-    
+
     const formattedContacts = contactDetails.map(c => ({
       uid: c.firebaseUid,
       email: c.email,
