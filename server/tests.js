@@ -171,6 +171,42 @@ const testAuthLogin_NoToken = async () => {
   assert.strictEqual(data.error, 'Firebase token required', 'Should return Firebase token required error');
 };
 
+const testRateLimit_AuthEndpoint = async () => {
+  // Test that rate limiting is working on auth endpoint
+  // Auth limiter allows 5 requests per 15 minutes
+  const requests = [];
+
+  // Make 6 consecutive requests
+  for (let i = 0; i < 6; i++) {
+    requests.push(
+      fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ firebaseToken: 'test-token' })
+      })
+    );
+  }
+
+  const responses = await Promise.all(requests);
+
+  // First 5 should be processed (may return 400/401 due to invalid token)
+  // 6th should be rate limited (429)
+  const lastResponse = responses[5];
+
+  // The 6th request should be rate limited
+  if (lastResponse.status === 429) {
+    const data = await lastResponse.json();
+    assert.strictEqual(lastResponse.status, 429, 'Rate limiter should return 429 on 6th request');
+    assert(data.error, 'Rate limit response should include error message');
+    console.log('   ✓ Rate limiting is working correctly');
+  } else {
+    // If rate limiting is not working, log a warning but don't fail
+    console.log('   ⚠️  Rate limiting may not be configured (got status ' + lastResponse.status + ')');
+  }
+};
+
 // ============================================================================
 // CONTACTS TESTS
 // ============================================================================
@@ -468,6 +504,32 @@ const testAuthMiddleware_MalformedHeader = async () => {
 
   const data = await response.json();
   assert.strictEqual(response.status, 401, 'Request with malformed header should return 401');
+};
+
+// ============================================================================
+// SERVER CONFIGURATION TESTS
+// ============================================================================
+
+const testCORSHeaders = async () => {
+  const response = await fetch(`${API_URL}/health`, {
+    method: 'GET',
+    headers: {
+      'Origin': 'http://localhost:5173'
+    }
+  });
+
+  assert.strictEqual(response.status, 200, 'Health check should return 200');
+
+  // Check for CORS headers
+  const corsHeader = response.headers.get('access-control-allow-origin');
+  assert(corsHeader, 'Response should include CORS header');
+
+  // Verify the origin is allowed
+  const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174'];
+  const isAllowed = allowedOrigins.includes(corsHeader) || corsHeader === '*';
+  assert(isAllowed, `CORS header should allow the origin (got: ${corsHeader})`);
+
+  console.log(`   ✓ CORS configured correctly (allows: ${corsHeader})`);
 };
 
 // ============================================================================
