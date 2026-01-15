@@ -39,6 +39,18 @@ const generateToken = (user) => {
   );
 };
 
+const generateExpiredToken = (user) => {
+  return jwt.sign(
+    {
+      userId: user.userId,
+      mongoId: user.mongoId || user.userId,
+      username: user.username || user.email?.split('@')[0] || 'TestUser',
+    },
+    JWT_SECRET,
+    { expiresIn: '-1h' } // Token expired 1 hour ago
+  );
+};
+
 const runTest = async (name, testFn) => {
   try {
     console.log(`\n🧪 Running test: ${name}`);
@@ -389,6 +401,37 @@ const testAddContact_RateLimiting = async () => {
   console.log(`   ℹ️  Rate limit test: ${statusCodes.filter(s => s === 429).length} requests were rate limited`);
 };
 
+const testAddContact_InvalidEmailFormat = async () => {
+  const token = generateToken(testUser1);
+  const response = await fetch(`${API_URL}/api/contacts/add`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ addEmail: 'notanemail' })
+  });
+
+  const data = await response.json();
+  // Firebase will reject invalid email formats
+  assert.strictEqual(response.status, 404, 'Invalid email format should return 404');
+  assert.strictEqual(data.error, 'User not found in Firebase', 'Should return user not found error');
+};
+
+const testGetContacts_ExpiredToken = async () => {
+  const expiredToken = generateExpiredToken(testUser1);
+  const response = await fetch(`${API_URL}/api/contacts`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${expiredToken}`
+    }
+  });
+
+  const data = await response.json();
+  assert.strictEqual(response.status, 401, 'Expired token should return 401');
+  assert.strictEqual(data.error, 'Invalid token', 'Should return invalid token error');
+};
+
 // ============================================================================
 // MESSAGES TESTS
 // ============================================================================
@@ -586,6 +629,8 @@ const runAllTests = async () => {
         { name: 'Add contact - invalid token', fn: testAddContact_InvalidToken },
         { name: 'Add contact - self email', fn: testAddContact_SelfEmail },
         { name: 'Add contact - rate limiting', fn: testAddContact_RateLimiting },
+        { name: 'Add contact - invalid email format', fn: testAddContact_InvalidEmailFormat },
+        { name: 'Get contacts - expired token', fn: testGetContacts_ExpiredToken },
       ]
     },
     {
