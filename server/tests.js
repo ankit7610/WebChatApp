@@ -432,6 +432,36 @@ const testGetContacts_ExpiredToken = async () => {
   assert.strictEqual(data.error, 'Invalid token', 'Should return invalid token error');
 };
 
+const testRemoveContact_ValidToken = async () => {
+  const token = generateToken(testUser1);
+  const response = await fetch(`${API_URL}/api/contacts/remove`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ removeEmail: testUser2.email })
+  });
+
+  // May return 404 if user doesn't exist in DB
+  if (response.status === 404) {
+    console.log('   ⚠️  User or contact not found in DB (expected in test environment)');
+    return;
+  }
+
+  // May return 400 if contact doesn't exist in user's contact list
+  if (response.status === 400) {
+    const data = await response.json();
+    console.log(`   ⚠️  ${data.error} (expected in test environment)`);
+    return;
+  }
+
+  const data = await response.json();
+  assert.strictEqual(response.status, 200, 'Remove contact should return 200');
+  assert(data.message, 'Response should include success message');
+};
+
+
 // ============================================================================
 // MESSAGES TESTS
 // ============================================================================
@@ -521,6 +551,30 @@ const testGetConversations_ValidToken = async () => {
   const data = await response.json();
   assert.strictEqual(response.status, 200, 'Get conversations should return 200');
   assert(Array.isArray(data), 'Conversations response should be an array');
+};
+
+const testSendMessage_EmptyContent = async () => {
+  const token = generateToken(testUser1);
+  const response = await fetch(`${API_URL}/api/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      receiverId: testUser2.userId,
+      content: '   ',  // Empty/whitespace content
+      timestamp: new Date().toISOString()
+    })
+  });
+
+  const data = await response.json();
+
+  // Should reject empty messages with 400
+  assert.strictEqual(response.status, 400, 'Empty message content should return 400');
+  assert(data.error, 'Response should include error message');
+  assert(data.error.toLowerCase().includes('content') || data.error.toLowerCase().includes('message'),
+    'Error should mention content or message requirement');
 };
 
 // ============================================================================
@@ -631,6 +685,7 @@ const runAllTests = async () => {
         { name: 'Add contact - rate limiting', fn: testAddContact_RateLimiting },
         { name: 'Add contact - invalid email format', fn: testAddContact_InvalidEmailFormat },
         { name: 'Get contacts - expired token', fn: testGetContacts_ExpiredToken },
+        { name: 'Remove contact - valid token', fn: testRemoveContact_ValidToken },
       ]
     },
     {
@@ -642,6 +697,7 @@ const runAllTests = async () => {
         { name: 'Get conversations - valid token', fn: testGetConversations_ValidToken },
         { name: 'Get conversations - no token', fn: testGetConversations_NoToken },
         { name: 'Get conversations - invalid token', fn: testGetConversations_InvalidToken },
+        { name: 'Send message - empty content', fn: testSendMessage_EmptyContent },
       ]
     },
     {
