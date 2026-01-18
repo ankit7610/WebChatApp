@@ -461,6 +461,22 @@ const testRemoveContact_ValidToken = async () => {
   assert(data.message, 'Response should include success message');
 };
 
+const testRemoveContact_NoEmail = async () => {
+  const token = generateToken(testUser1);
+  const response = await fetch(`${API_URL}/api/contacts/remove`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({})
+  });
+
+  const data = await response.json();
+  assert.strictEqual(response.status, 400, 'Remove contact without email should return 400');
+  assert(data.error, 'Should return error message');
+};
+
 
 // ============================================================================
 // MESSAGES TESTS
@@ -603,6 +619,19 @@ const testAuthMiddleware_MalformedHeader = async () => {
   assert.strictEqual(response.status, 401, 'Request with malformed header should return 401');
 };
 
+const testAuthMiddleware_BearerOnly = async () => {
+  const response = await fetch(`${API_URL}/api/messages/conversations`, {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer '
+    }
+  });
+
+  const data = await response.json();
+  assert.strictEqual(response.status, 401, 'Request with Bearer but no token should return 401');
+  assert(data.error, 'Should return error message');
+};
+
 // ============================================================================
 // SERVER CONFIGURATION TESTS
 // ============================================================================
@@ -686,6 +715,7 @@ const runAllTests = async () => {
         { name: 'Add contact - invalid email format', fn: testAddContact_InvalidEmailFormat },
         { name: 'Get contacts - expired token', fn: testGetContacts_ExpiredToken },
         { name: 'Remove contact - valid token', fn: testRemoveContact_ValidToken },
+        { name: 'Remove contact - no email', fn: testRemoveContact_NoEmail },
       ]
     },
     {
@@ -705,6 +735,7 @@ const runAllTests = async () => {
       tests: [
         { name: 'Auth middleware - no Authorization header', fn: testAuthMiddleware_NoHeader },
         { name: 'Auth middleware - malformed Authorization header', fn: testAuthMiddleware_MalformedHeader },
+        { name: 'Auth middleware - Bearer only (no token)', fn: testAuthMiddleware_BearerOnly },
       ]
     },
     {
